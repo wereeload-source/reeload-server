@@ -113,3 +113,21 @@ select cron.schedule('retention-sweep', '30 21 * * *',  -- 03:00 IST
 - Leave requests from the reelmaker app, reschedule flow, notifications fan-out for more events
 - Admin user invites (an Edge Function calling `auth.admin.inviteUserByEmail`)
 - Column-level hiding of the shoot brief from Accounts (today Accounts reads jobs through `jobs_accounts`)
+
+## API reference (Steps 1–2)
+
+All routes except `/health` and `POST /auth/login` need `Authorization: Bearer <token>`. Errors are `{ statusCode, message }`.
+
+| Route | Roles | What it does |
+|---|---|---|
+| `POST /auth/login`, `GET /me`, `POST /auth/password` | any | Sign in, who am I, change own password |
+| `GET/POST /users`, `PATCH /users/:id`, `POST /users/:id/password` | admin | Create, disable, change role, reset password |
+| `GET /jobs`, `GET /jobs/:id` | admin, sales, ops (+ own jobs for reelmaker) | List (filter `status`, `q`, `city`, `from`, `to`) and detail. Money fields only for roles allowed to see them |
+| `POST /jobs` | admin, sales | Client (matched by phone) + job + amount + advance + optional confirm, all or nothing |
+| `PATCH /jobs/:id`, `PUT /jobs/:id/amount` | admin, sales | Edit details / set the agreed amount before confirmation |
+| `POST /jobs/:id/confirm` | admin, sales | Refused without consent and an advance |
+| `POST /jobs/:id/reschedule` | admin, sales, ops | Moves the booking; unassigns the reelmaker if they are no longer free |
+| `GET /clients/lookup?phone=` | admin, sales | Repeat client by phone |
+| `GET /jobs/:id/summary`, `POST /jobs/:id/advance` | admin, sales (+accounts read) | Agreed, approved changes, advance, received, balance |
+| `POST /jobs/:id/price-changes`, `GET /price-changes`, `POST /price-changes/:id/decision` | sales request, admin decides | Price changes need Admin approval |
+| `POST /contacts`, `GET /contacts?date=` | admin, sales | Daily contact log and counts (IST day) |

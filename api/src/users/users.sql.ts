@@ -49,3 +49,5 @@ export const AUDIT_SQL = `select public.write_audit($1::text, 'profiles', $2::te
 export const SET_PASSWORD_ADMIN_SQL = `
 update auth.users set encrypted_password = crypt($2::text, gen_salt('bf')), updated_at = now()
 where id = $1::uuid returning id`;
+
+export const checkQueries = { updateProfileSql: updateProfileSql(['full_name', 'phone', 'active', 'role']) };

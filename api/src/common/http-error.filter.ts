@@ -35,7 +35,8 @@ export class HttpErrorFilter implements ExceptionFilter {
       return;
     }
 
-    log.error(exception instanceof Error ? (exception.stack ?? exception.message) : String(exception));
+    const err = exception as { stack?: string; message?: string } | null;
+    log.error(err?.stack ?? err?.message ?? String(exception));
     res.status(500).json({ statusCode: 500, message: 'Something went wrong' });
   }
 }
