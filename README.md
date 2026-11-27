@@ -142,3 +142,13 @@ All routes except `/health` and `POST /auth/login` need `Authorization: Bearer <
 | `GET /reelmakers` | admin, ops, sales | Reelmaker list |
 | `GET/POST /leave`, `DELETE /leave/:id` | admin, ops | Leave; refused over a booked shoot |
 | `GET /notifications`, `POST /notifications/:id/read`, `POST /notifications/read-all` | any | Own in-app notices and unread count |
+
+### Step 4: the reelmaker app
+
+| Route | Roles | What it does |
+|---|---|---|
+| `GET /me/shoots?when=upcoming\|past\|all` | reelmaker | Own shoots (no money fields) |
+| `GET /me/shoots/:jobId` | reelmaker | One shoot: address, map link, on-site contact, brief |
+| `POST /me/shoots/:jobId/respond` | reelmaker | `{accept, reason}`; a decline needs a reason and the job returns to Operations |
+| `POST /me/shoots/:jobId/drop-out` | reelmaker | Give back an accepted shoot with a reason; Ops and Admin are told |
+| `GET /hours?month=YYYY-MM` | reelmaker (own), admin, ops | Booked and extra hours per reelmaker |
