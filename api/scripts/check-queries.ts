@@ -15,6 +15,8 @@ const MODULES = [
   '../src/users/users.sql.js',
   '../src/jobs/jobs.sql.js',
   '../src/sales/sales.sql.js',
+  '../src/assign/assign.sql.js',
+  '../src/notifications/notifications.sql.js',
 ];
 
 const url = process.env.DATABASE_URL;

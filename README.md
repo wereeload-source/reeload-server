@@ -131,3 +131,14 @@ All routes except `/health` and `POST /auth/login` need `Authorization: Bearer <
 | `GET /jobs/:id/summary`, `POST /jobs/:id/advance` | admin, sales (+accounts read) | Agreed, approved changes, advance, received, balance |
 | `POST /jobs/:id/price-changes`, `GET /price-changes`, `POST /price-changes/:id/decision` | sales request, admin decides | Price changes need Admin approval |
 | `POST /contacts`, `GET /contacts?date=` | admin, sales | Daily contact log and counts (IST day) |
+
+### Step 3: assigning
+
+| Route | Roles | What it does |
+|---|---|---|
+| `GET /assign/queue` | admin, ops | Unassigned confirmed jobs, soonest first; `flagged` inside 48 h (setting `unassigned_flag_hours`); declined/dropped jobs return with the reason; plus jobs awaiting a reply |
+| `GET /jobs/:id/candidates` | admin, ops | Active reelmakers as `free`, `busy` or `leave` for that job's time, same-city first |
+| `POST /jobs/:id/assign` | admin, ops | Assign or reassign; refused on leave, on overlap (database exclusion constraint) or wrong job state |
+| `GET /reelmakers` | admin, ops, sales | Reelmaker list |
+| `GET/POST /leave`, `DELETE /leave/:id` | admin, ops | Leave; refused over a booked shoot |
+| `GET /notifications`, `POST /notifications/:id/read`, `POST /notifications/read-all` | any | Own in-app notices and unread count |
