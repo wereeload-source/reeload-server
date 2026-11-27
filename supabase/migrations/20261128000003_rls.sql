@@ -135,3 +135,14 @@ where public.has_role('admin', 'accounts', 'sales');
 revoke all on all tables in schema public from anon;
 revoke execute on all functions in schema public from anon;
 revoke insert, update, delete on public.audit_log from authenticated;
+
+-- Status, confirmation and release times only change through the workflow functions.
+revoke update on public.jobs from authenticated;
+grant update (city, address, maps_url, starts_at, duration_minutes, onsite_contact_name,
+              onsite_contact_phone, brief, consent) on public.jobs to authenticated;
+-- Settings: only the value is editable (and RLS limits that to admin).
+revoke update on public.settings from authenticated;
+grant update (value) on public.settings to authenticated;
+-- Users can't change their own role; admin changes go through the admin policy on these columns.
+revoke update on public.profiles from authenticated;
+grant update (full_name, phone, active, role) on public.profiles to authenticated;

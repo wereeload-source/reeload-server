@@ -2,7 +2,7 @@
 
 Backend for **ReelOps**, the reel-shoot operations system: Supabase (Postgres, Auth, Row Level Security, Edge Functions) plus Cloudflare R2 for files and the WhatsApp Business Cloud API for check-in codes.
 
-The frontend lives in [`reeload-client`](../reeload-client).
+The frontend lives in [`reeload-client`](https://github.com/wereeload-source/reeload-client).
 
 ## What is here
 

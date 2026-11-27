@@ -86,3 +86,16 @@ do $$ begin
     raise notice 'ok: audit log is append-only (% entries)', (select count(*) from public.audit_log);
   end;
 end $$;
+
+-- Sales cannot skip the workflow by writing the status column.
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
+do $$ begin
+  begin
+    update public.jobs set status = 'paid' where id = '20000000-0000-0000-0000-000000000002';
+    raise exception 'FAIL: sales changed status directly';
+  exception when insufficient_privilege then
+    raise notice 'ok: status only changes through workflow functions';
+  end;
+end $$;
+reset role;
