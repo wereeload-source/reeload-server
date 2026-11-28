@@ -9,6 +9,7 @@ import { HealthModule } from './health/health.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { SalesModule } from './sales/sales.module.js';
+import { ShootsModule } from './shoots/shoots.module.js';
 import { UsersModule } from './users/users.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -30,6 +31,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     SalesModule,
     AssignModule,
     NotificationsModule,
+    ShootsModule,
     HealthModule,
   ],
   controllers: [AppController],
