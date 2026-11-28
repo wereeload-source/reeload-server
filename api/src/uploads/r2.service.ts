@@ -23,15 +23,18 @@ export class R2Service {
   constructor(private readonly config: ConfigService<Env, true>) {}
 
   private get cfg() {
+    const endpoint = this.config.get('R2_ENDPOINT', { infer: true });
     const accountId = this.config.get('R2_ACCOUNT_ID', { infer: true });
     const accessKeyId = this.config.get('R2_ACCESS_KEY_ID', { infer: true });
     const secretAccessKey = this.config.get('R2_SECRET_ACCESS_KEY', { infer: true });
-    if (!accountId || !accessKeyId || !secretAccessKey) {
+    if ((!accountId && !endpoint) || !accessKeyId || !secretAccessKey) {
       this.log.error('R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must be set in api/.env');
       throw new ServiceUnavailableException('File storage is not set up yet. Call operations.');
     }
     const creds: Credentials = { accessKeyId, secretAccessKey, region: 'auto', service: 's3' };
-    return { creds, host: `${accountId}.r2.cloudflarestorage.com`, bucket: this.config.get('R2_BUCKET', { infer: true }) };
+    const url = new URL(endpoint ?? `https://${accountId}.r2.cloudflarestorage.com`);
+    const protocol = url.protocol === 'http:' ? ('http' as const) : ('https' as const);
+    return { creds, host: url.host, protocol, bucket: this.config.get('R2_BUCKET', { infer: true }) };
   }
 
   private path(key: string): string {
@@ -39,16 +42,16 @@ export class R2Service {
   }
 
   private presign(method: string, key: string, query: Record<string, string>, seconds: number): string {
-    const { creds, host } = this.cfg;
-    return presignUrl(creds, { method, host, path: this.path(key), query }, seconds, new Date());
+    const { creds, host, protocol } = this.cfg;
+    return presignUrl(creds, { method, host, protocol, path: this.path(key), query }, seconds, new Date());
   }
 
   private async call(method: string, key: string, query: Record<string, string>, opts: { body?: string; contentType?: string } = {}): Promise<string> {
-    const { creds, host } = this.cfg;
+    const { creds, host, protocol } = this.cfg;
     const path = this.path(key);
     const headers = signHeaders(creds, { method, host, path, query, ...opts }, new Date());
     const qs = Object.entries(query).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-    const res = await fetch(`https://${host}${path}${qs ? `?${qs}` : ''}`, { method, headers, body: opts.body });
+    const res = await fetch(`${protocol}://${host}${path}${qs ? `?${qs}` : ''}`, { method, headers, body: opts.body });
     const text = await res.text();
     if (!res.ok) {
       this.log.error(`R2 ${method} ${res.status}: ${text.slice(0, 300)}`);
@@ -109,9 +112,9 @@ export class R2Service {
 
   /** Size in bytes of a stored object, or null if it is not there. */
   async size(key: string): Promise<number | null> {
-    const { creds, host } = this.cfg;
+    const { creds, host, protocol } = this.cfg;
     const headers = signHeaders(creds, { method: 'HEAD', host, path: this.path(key) }, new Date());
-    const res = await fetch(`https://${host}${this.path(key)}`, { method: 'HEAD', headers });
+    const res = await fetch(`${protocol}://${host}${this.path(key)}`, { method: 'HEAD', headers });
     if (res.status === 404) return null;
     if (!res.ok) throw new ServiceUnavailableException('File storage is not answering. Try again in a moment.');
     return Number(res.headers.get('content-length') ?? 0);

@@ -41,6 +41,8 @@ pnpm db:seed                       # five demo accounts and three sample jobs. N
 pnpm start:dev                     # http://localhost:4000   (GET /health)
 ```
 
+File uploads and check-in photos work locally too: `pnpm storage:local` (terminal 3) runs an S3-compatible stand-in for R2 on `http://127.0.0.1:9100`, with files in `api/.local-storage`. Set `R2_ENDPOINT=http://127.0.0.1:9100`, `R2_ACCESS_KEY_ID=local` and `R2_SECRET_ACCESS_KEY=local-secret` in `api/.env`. It checks signatures and answers CORS like the real R2 rule. The API refuses to start in production with `R2_ENDPOINT` set.
+
 Demo logins (password `Reeload#2025`, or `SEED_PASSWORD`): `admin@`, `sales@`, `ops@`, `accounts@`, `reelmaker@` `reeload.test`. **Do not seed production.**
 
 Production runs on **Supabase Postgres**: see [docs/GO-LIVE.md](docs/GO-LIVE.md) for the exact steps (connection strings, SSL certificate, locking down Supabase's Data API, WhatsApp and R2).
@@ -67,7 +69,7 @@ pnpm test:e2e                      # every role against the real routes (needs t
 
 ## Known gaps
 
-- Not yet tried against a real Supabase project, a real R2 bucket or the real WhatsApp API (all three need your accounts; see GO-LIVE). Everything else, including every route and role, runs against a real Postgres in the e2e tests.
+- Not yet tried against a real Supabase project, a real R2 bucket or the real WhatsApp API (all three need your accounts; see GO-LIVE). Everything else, including every route and role, runs against a real Postgres in the e2e tests, and uploads run against the local R2 stand-in (`test/storage.e2e-spec.ts`).
 - `pg` prints a deprecation warning about overlapping queries from inside Prisma's own adapter (`@prisma/adapter-pg` 7.10), not from this code. Harmless until `pg@9`; update Prisma when a fix is released.
 
 ## Still to build (per the build plan)

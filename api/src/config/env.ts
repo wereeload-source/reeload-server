@@ -31,6 +31,8 @@ export const envSchema = z.object({
 
   /** Cloudflare R2 (private bucket). Needed by uploads and download links. */
   R2_ACCOUNT_ID: z.string().optional(),
+  /** Development only: an S3-compatible stand-in such as `pnpm storage:local` (http://127.0.0.1:9100). Never set in production. */
+  R2_ENDPOINT: z.string().url().optional(),
   R2_BUCKET: z.string().default('reeload-files'),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
@@ -44,6 +46,9 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   if (!parsed.success) {
     const problems = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Invalid environment (see api/.env.example): ${problems}`);
+  }
+  if (parsed.data.NODE_ENV === 'production' && parsed.data.R2_ENDPOINT) {
+    throw new Error('Invalid environment: R2_ENDPOINT is for local development only. Remove it in production.');
   }
   return parsed.data;
 }

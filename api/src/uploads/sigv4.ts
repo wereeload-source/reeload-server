@@ -40,6 +40,8 @@ interface Target {
   /** Already-encoded path, starting with "/". */
   path: string;
   query?: Record<string, string>;
+  /** "https" unless a local S3 stand-in is used in development. Not part of the signature. */
+  protocol?: 'http' | 'https';
 }
 
 /** A presigned URL: whoever holds it can make that one request until it expires. */
@@ -59,7 +61,7 @@ export function presignUrl(c: Credentials, t: Target, expiresSeconds: number, no
   const canonical = [t.method, t.path, cq, `host:${t.host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n');
   const toSign = ['AWS4-HMAC-SHA256', stamp, scope, sha256(canonical)].join('\n');
   const signature = createHmac('sha256', signingKey(c, day)).update(toSign).digest('hex');
-  return `https://${t.host}${t.path}?${cq}&X-Amz-Signature=${signature}`;
+  return `${t.protocol ?? 'https'}://${t.host}${t.path}?${cq}&X-Amz-Signature=${signature}`;
 }
 
 /** Headers for a request the server makes itself (create/list/complete/abort/delete). */

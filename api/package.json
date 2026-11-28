@@ -25,7 +25,8 @@
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:deploy": "prisma migrate deploy",
-    "db:local": "tsx scripts/local-db.ts"
+    "db:local": "tsx scripts/local-db.ts",
+    "storage:local": "tsx scripts/local-s3.ts"
   },
   "dependencies": {
     "@nestjs/authentication": "latest",
