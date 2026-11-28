@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
-import { CurrentUser, Public, Roles } from '../common/decorators.js';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { CurrentUser, Public } from '@nestjs/authentication';
+import { Can } from '@nestjs/authorization';
+import { Throttle } from '@nestjs/throttler';
+import { AccessPolicy } from '../access/access.policy.js';
 import type { AuthUser } from '../common/types.js';
-import { ZodPipe } from '../common/zod.pipe.js';
 import { CreateShareLink, type CreateShareLinkInput } from './share.schemas.js';
 import { ShareService } from './share.service.js';
 
@@ -12,35 +14,28 @@ export class ShareController {
   constructor(private readonly share: ShareService) {}
 
   @Post('jobs/:id/share-links')
-  @Roles('ops', 'admin')
-  create(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body(new ZodPipe(CreateShareLink)) body: CreateShareLinkInput) {
+  @Can(AccessPolicy, 'manageShareLinks')
+  create(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body({ schema: CreateShareLink }) body: CreateShareLinkInput) {
     return this.share.create(user, id, body);
   }
 
   @Get('jobs/:id/share-links')
-  @Roles('ops', 'admin')
-  list(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string) {
-    return this.share.list(user, id);
+  @Can(AccessPolicy, 'manageShareLinks')
+  list(@Param('id', uuid()) id: string) {
+    return this.share.list(id);
   }
 
   @Post('share-links/:id/revoke')
-  @Roles('ops', 'admin')
+  @Can(AccessPolicy, 'manageShareLinks')
   revoke(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string) {
     return this.share.revoke(user, id);
   }
 
-  /** The client's download page data. No sign-in: the token is the key. */
+  /** The client's download page data. No sign-in: the token is the key. Rate limited against guessing. */
   @Public()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Get('public/share/:token')
   resolve(@Param('token') token: string) {
     return this.share.resolve(token);
-  }
-
-  /** Daily clean-up, called by a scheduler. Needs the `x-cron-secret` header. */
-  @Public()
-  @Post('retention/sweep')
-  @HttpCode(200)
-  sweep(@Headers('x-cron-secret') secret?: string) {
-    return this.share.sweep(secret);
   }
 }

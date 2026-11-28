@@ -18,7 +18,7 @@ export function linkVerdict(role: Role, status: string): LinkVerdict {
 }
 
 /** State of a link for the list on the job page. */
-export function linkState(l: { revoked_at: Date | string | null; expires_at: Date | string }, now: number): 'revoked' | 'expired' | 'active' {
-  if (l.revoked_at) return 'revoked';
-  return new Date(l.expires_at).getTime() < now ? 'expired' : 'active';
+export function linkState(l: { revokedAt: Date | string | null; expiresAt: Date | string }, now: number): 'revoked' | 'expired' | 'active' {
+  if (l.revokedAt) return 'revoked';
+  return new Date(l.expiresAt).getTime() < now ? 'expired' : 'active';
 }

@@ -1,26 +1,28 @@
 # Testing (documentation section 10)
 
-Run everything automated with one command, then do the phone checks by hand.
+Run everything automated, then do the phone checks by hand.
 
 ```bash
-PGHOST=localhost PGUSER=postgres scripts/test-db.sh          # database: rules, security, acceptance (throwaway local database)
-cd api && DATABASE_URL=... pnpm check:sql && pnpm test     # every API query against a migrated database, then unit tests
-SOURCE_URL=... TARGET_URL=... scripts/restore-drill.sh       # backup and restore (see docs/GO-LIVE.md)
+cd api
+pnpm build && pnpm test                    # compile, then unit tests of the pure rules
+pnpm db:migrate && pnpm db:seed && pnpm test:e2e   # every role against the real routes
+SOURCE_URL=... TARGET_URL=... # backup and restore: see docs/GO-LIVE.md
 ```
 
 ## Section 10, line by line
 
 | Documentation test | How it is checked | Where |
 |---|---|---|
-| **Access.** Every role tries every table. Operations and reelmakers cannot read any money table | Automated: 5 roles against `job_money`, `payments`, `price_changes`, `job_balances`, `audit_log`, `share_links`; Ops and Reelmaker also cannot insert a payment; a disabled user sees nothing | `supabase/tests/foundation.sql`, `acceptance.sql` |
-| **Advance.** Confirming without an advance is refused | Automated, including all-or-nothing rollback in `create_job` | `rules.sql` |
-| **Double booking.** Overlapping assignments are refused | Automated (exclusion constraint), plus leave and reschedule clashes | `rules.sql`, Step 3 flow |
-| **OTP.** Wrong-code limit, expiry, resend limit, cooldown, 5-minute rule on the server | Automated rules with unit tests at every boundary (59 s / 60 s, 3rd / 4th send, 4th / 5th wrong code, 9:59 / 10:01, 4:59 / 5:00); the row locking and committed-attempt behaviour were exercised against the database | `api/src/checkin/checkin.rules.spec.ts` |
-| **Camera.** Two photos work in iPhone Safari and Android Chrome; no gallery; no location asked | **By hand**, checklist below (client app) | |
-| **Uploads.** Several photos and a large video from Photos in Safari; lock screen, drop the connection, reopen and resume; HEIC and HEVC | **By hand**, checklist below. The server side (resume of the same file, part listing, completion, job moves to Uploaded) is automated | `api/src/uploads/*` |
-| **Download link.** Not before Paid; expires after 7 days; revoked links stop working | Automated: who may create (`share.rules.spec.ts`), expiry and revoke states, link lookup by hash | `api/src/share/*` |
-| **Deletion.** Raw gone at 10 days, edited at 20 | Automated: the exact query the sweep runs, at both boundaries, counted from the shoot date | `acceptance.sql` |
-| **Audit.** Entries cannot be edited or deleted | Automated for Admin, Ops and the database owner (update, delete, truncate) | `rules.sql`, `acceptance.sql` |
+| **Access.** Operations and reelmakers never see money | `roles.e2e-spec.ts`: five roles call every route group and must get 200 or 403 exactly as `AccessPolicy` says; Sales sees `agreed_amount` on jobs, Ops never does | `api/test/roles.e2e-spec.ts`, `api/src/access` |
+| **Login and logout.** Wrong password and unknown email look the same; a refresh token works once; logout ends the session on the server | e2e | `api/test/roles.e2e-spec.ts` |
+| **Advance.** Confirming without an advance is refused | Service rule in `jobs.service.ts`; add an e2e case before go-live | `api/src/jobs` |
+| **Double booking.** Overlapping assignments and leave are refused | `booking.service.ts` under an advisory lock; add an e2e case before go-live | `api/src/assign` |
+| **OTP.** Wrong-code limit, expiry, resend limit, cooldown, 5-minute rule | Unit tests at every boundary (59 s / 60 s, 3rd / 4th send, 4th / 5th wrong code, 9:59 / 10:01, 4:59 / 5:00) | `api/src/checkin/checkin.rules.spec.ts` |
+| **Camera.** Two photos in iPhone Safari and Android Chrome | **By hand**, checklist below | |
+| **Uploads.** Several photos and a large video from Photos; resume after losing the connection; HEIC and HEVC | **By hand**. Request signing is unit tested against AWS's published example | `api/src/uploads/sigv4.spec.ts` |
+| **Download link.** Not before Paid; expires after 7 days; revoked links stop | Unit tests for who may create and link states | `api/src/share/share.rules.spec.ts` |
+| **Deletion.** Raw gone at 10 days, edited at 20 | `retention.service.ts`; check by hand on a dev branch with backdated jobs | `api/src/share` |
+| **Audit.** Entries cannot be edited or deleted | `AuditService` has insert only; nothing else touches the table | `api/src/common/audit.service.ts` |
 
 ## By-hand checks (real phones, real R2 bucket)
 
@@ -39,7 +41,6 @@ Do these on the pilot devices before the first real shoot. Use Meta's test numbe
 
 ## Known gaps
 
-These are things nobody has been able to run yet, so they are the first things to watch in the pilot:
-
-- The NestJS API was written and checked without installing its dependencies (`@nestjs/*`, `pg`, `zod`) in the authoring environment. Run `pnpm install && pnpm build && pnpm test` in `api/` first; fix anything the compiler reports before anything else.
-- No test has talked to a real Neon database, a real R2 bucket or the real WhatsApp API. The R2 request signing is verified against the signature in AWS's published example, not against R2 itself.
+- The API was rewritten to Prisma without being able to install dependencies, so nothing has been compiled or run yet. Run `pnpm install && pnpm build && pnpm test` in `api/` first and fix what the compiler reports.
+- The earlier database-level rule tests were removed together with the SQL rules; their cases (advance, double booking, price approval, payments never above the balance, ops cannot see money) now need service or e2e tests. Writing more of those as e2e tests (they run against `pnpm db:local`) is the next testing task.
+- No test has talked to the real Supabase project, a real R2 bucket or the real WhatsApp API (the e2e tests run on a real local Postgres).

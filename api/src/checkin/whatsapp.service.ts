@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { env } from '../common/env.js';
+import { ConfigService } from '@nestjs/config';
+import type { Env } from '../config/env.js';
 import { toWhatsAppNumber } from './phone.js';
 
 export { maskPhone } from './phone.js';
@@ -8,11 +9,16 @@ export { maskPhone } from './phone.js';
 export class WhatsAppService {
   private readonly log = new Logger('WhatsApp');
 
+  constructor(private readonly config: ConfigService<Env, true>) {}
+
   /** Sends the check-in code with the approved authentication template. */
   async sendOtp(toPhone: string, code: string): Promise<void> {
-    const { token, phoneId, otpTemplate, lang } = env.whatsapp;
+    const token = this.config.get('WHATSAPP_TOKEN', { infer: true });
+    const phoneId = this.config.get('WHATSAPP_PHONE_NUMBER_ID', { infer: true });
+    const otpTemplate = this.config.get('WHATSAPP_OTP_TEMPLATE', { infer: true });
+    const lang = this.config.get('WHATSAPP_TEMPLATE_LANG', { infer: true });
     if (!token || !phoneId) {
-      if (env.production) throw new ServiceUnavailableException('WhatsApp is not set up. Call operations.');
+      if (this.config.get('NODE_ENV', { infer: true }) === 'production') throw new ServiceUnavailableException('WhatsApp is not set up. Call operations.');
       this.log.warn(`[dev] OTP for ${toPhone}: ${code}`);
       return;
     }

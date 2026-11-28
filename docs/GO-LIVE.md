@@ -1,42 +1,72 @@
-# Go-live and handover (build plan step 11)
+# Go-live and handover
 
-## 1. Accounts to hand over
+What you (the owner) set up, in order. Each step says where to click and which value goes where.
+Nothing here is needed for local development: `pnpm db:local` gives you a real Postgres, and check-in codes are printed in the API log.
 
-| Account | Used for | Notes |
-|---|---|---|
-| Neon project | Postgres database | Use the **pooled** string in `api/.env`; the **direct** string for backups. Turn on the paid plan before go-live for longer history |
-| Cloudflare R2 | Private bucket `reelops-files` | API token with Object Read & Write; CORS rule: `PUT` from the app origin, expose `ETag` |
-| Meta WhatsApp Business | Check-in codes | Start verification in week 1. Template below |
-| Domain + hosting | App and API | See section 3 |
-| GitHub | `reeload-client`, `reeload-server` | Make both repositories **private** before real data exists |
+## 1. Supabase (the Postgres database)
 
-## 2. WhatsApp authentication template
+Supabase is used **only as the Postgres database**. Sign-in, permissions and every rule stay in the NestJS API, so Supabase Auth, Storage and Edge Functions are not used.
 
-Category **Authentication**, name `reelops_checkin_otp`, language English, with the "copy code" button. Body: the standard authentication text ("{{1}} is your verification code."). The API sends the code in the body and the button parameter. Until Meta approves it, use the test number; with no `WHATSAPP_TOKEN` set, the code is printed in the API log in development and refused in production.
+1. Create a project at supabase.com. Pick the region closest to your users (for India: Mumbai, `ap-south-1`). Save the **database password** in a password manager.
+2. **Connection strings**: open the project and click **Connect** at the top.
+   - **Transaction pooler** (port **6543**) → `DATABASE_URL` in `api/.env`.
+   - **Session pooler** (port **5432**) → `DIRECT_URL` (used only by migrations).
+   - Replace `[YOUR-PASSWORD]` in both, and keep `?sslmode=require` at the end.
+3. **SSL certificate** (recommended): Project Settings → Database → SSL Configuration → **Download certificate**. Put its contents in `DATABASE_CA_CERT` on one line, writing `\n` where the lines break. The API then refuses to talk to anything that is not your database.
+4. On the same page, turn on **Enforce SSL**.
+5. **Data API**: Project Settings → Data API. Reeload does not use it, so **turn it off**. If you leave it on, the `lock_down_data_api` migration has already turned on row level security and removed access for the `anon` and `authenticated` roles, so the public anon key cannot read any table. Turning it off is still the safest choice.
+6. Create the tables from your computer: `cd api && pnpm db:deploy` (with `DIRECT_URL` set). **Never run `pnpm db:seed` on production.**
+7. Backups: the free plan keeps no backups you can download. Use the daily `scripts/backup.sh` (below), or the Pro plan's point-in-time recovery, before real data goes in.
 
-## 3. Environment
+## 2. WhatsApp (check-in codes)
 
-`api/.env` (never commit): `DATABASE_URL`, `JWT_SECRET` (`openssl rand -base64 48`), `HASH_PEPPER` (`openssl rand -base64 32`, set once, **never change**: it protects open check-in codes and existing download links), `CLIENT_URL`, `R2_*`, `WHATSAPP_*`, `CRON_SECRET`.
+The API sends the 6-digit check-in code to the on-site contact through the **WhatsApp Business Cloud API** (Meta), using an **authentication template**.
 
-Run the API as a long-lived Node 22 process (a small VPS with `pm2` or a container host). It needs outbound HTTPS to Neon, R2 and graph.facebook.com. Put it behind HTTPS and set `CLIENT_URL` to the app's address (CORS follows it).
+1. Go to developers.facebook.com → **My Apps → Create App** → type **Business**. Connect it to your **Meta Business account** (create one at business.facebook.com if you do not have one).
+2. In the app, choose **Add product → WhatsApp**. Meta gives you a **test phone number** and a temporary token straight away. With those you can send to up to 5 recipient numbers you verify.
+3. **Phone number ID**: WhatsApp → API Setup. Copy *Phone number ID* → `WHATSAPP_PHONE_NUMBER_ID`.
+4. **Message template**: WhatsApp Manager → Message templates → **Create template**:
+   - Category **Authentication**, name **`reeload_checkin_otp`**, language **English** (`en`).
+   - Code delivery: **Copy code** button. Meta writes the body text itself ("{{1}} is your verification code").
+   - Submit. Approval usually takes minutes to a day. The name and language must match `WHATSAPP_OTP_TEMPLATE` and `WHATSAPP_TEMPLATE_LANG`.
+5. **Permanent token** (the temporary one expires after 24 hours): business.facebook.com → Business settings → Users → **System users** → Add (role Admin) → **Assign assets**: your app and your WhatsApp account, full control → **Generate new token** for the app with the permissions `whatsapp_business_messaging` and `whatsapp_business_management`, expiry **Never** → `WHATSAPP_TOKEN`.
+6. **Your real business number**: WhatsApp Manager → Phone numbers → Add phone number. The number must not be in use on the WhatsApp phone app. Complete **Business verification** (Business settings → Security center) to send beyond the test limits. Start this early: Meta can take several days.
+7. Add a payment method in WhatsApp Manager. Meta charges authentication messages per message (check the current rate for India).
+8. Test it: create a job with your own WhatsApp as the on-site number, assign it, sign in as the reelmaker and tap **Reached**. The code should arrive on WhatsApp. Until `WHATSAPP_TOKEN` is set, development prints the code in the API log and production refuses to send.
 
-## 4. First production setup
+## 3. Cloudflare R2 (files)
 
-1. `scripts/migrate.sh` (no `--seed`) against the production database.
-2. Create the Admin user: sign in with a temporary seeded admin on a **dev branch**, or insert one with `psql` (see `api/src/users` for the columns) and set a strong password. Never seed the demo users in production.
-3. Create the real users from the Admin screen. Reelmakers need a base city.
-4. Review settings (Admin): retention (raw 10, edited 20), link days 7, raw deadline 24 h, edited deadline 3 days, 48 h flag.
-5. Schedule the daily clean-up: `ops/retention-sweep.workflow.yml` (GitHub Actions) or any scheduler that POSTs `/retention/sweep` with the `x-cron-secret` header at 03:00 IST.
-6. Daily backup (below).
+1. Cloudflare dashboard → R2 → **Create bucket** `reeload-files` (private, no public access).
+2. R2 → **Manage API tokens** → Create token with **Object Read & Write** on this bucket only. Copy the Access Key ID and Secret → `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. Your account ID → `R2_ACCOUNT_ID`.
+3. Bucket → Settings → **CORS policy**:
+   ```json
+   [{ "AllowedOrigins": ["https://YOUR-APP-DOMAIN"], "AllowedMethods": ["PUT", "GET"], "AllowedHeaders": ["*"], "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3600 }]
+   ```
+   Without `"ExposeHeaders": ["ETag"]` large uploads fail.
 
-## 5. Backup and restore drill
+## 4. Secrets and hosting
+
+- `JWT_SECRET` and `HASH_PEPPER`: generate each with `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`. Never change `HASH_PEPPER` once live: it would break open check-in codes and existing download links.
+- **API**: a long-lived Node 22+ process (Render, Railway, Fly.io, or a small VPS with `pm2`), not serverless, because the daily clean-up runs inside it. Run **exactly one** instance. It needs outbound HTTPS to Supabase, R2 and graph.facebook.com. Set `CLIENT_URL` to the app's address, and `TRUST_PROXY=1` when it sits behind one proxy.
+- **Client** (`reeload-client`): Vercel or any Node host. Set `API_URL` to the API's HTTPS address.
+- Serve both over HTTPS. Make both GitHub repositories **private** before real data exists.
+
+## 5. First production setup
+
+1. `pnpm db:deploy` against Supabase (no seed).
+2. Create the first Admin with a one-off script (copy `api/src/seed/seed.ts`, keep only the admin, use a strong password), run it once, then delete it.
+3. Sign in as Admin and create the real users. Reelmakers need a base city.
+4. Review Settings: retention (raw 10, edited 20), link days 7, raw deadline 24 h, edited deadline 3 days, 48 h flag.
+5. Schedule the daily backup (below) and run the restore drill once.
+
+## Backup and restore drill
 
 ```bash
-DATABASE_URL=<direct url> scripts/backup.sh                          # writes reelops-YYYYMMDD-HHMMSS.dump
-SOURCE_URL=<direct url> TARGET_URL=<empty db or Neon branch> scripts/restore-drill.sh
+DATABASE_URL=<DIRECT_URL> scripts/backup.sh                         # writes reeload-YYYYMMDD-HHMMSS.dump
+TARGET_URL=<an empty database> scripts/restore.sh reeload-YYYYMMDD-HHMMSS.dump
 ```
 
-The drill restores into an empty database and checks: every table has the same row count, a user can still sign in, Ops reads no payments, and the audit log is still read-only. It passed against a local copy; **run it once against the real Neon project before go-live** and keep the date. Schedule `backup.sh` daily (cron or a GitHub Action) and store the file outside Neon. To restore for real: create an empty database, `TARGET_URL=... scripts/restore.sh <file>`, point `DATABASE_URL` at it.
+Restore into an empty database (a spare Supabase project, or a local `pnpm db:local`), compare row counts per table, then sign in with a real account. Do this once before go-live and note the date. Keep backups somewhere other than Supabase.
 
 ## 6. Training session (one live online session, about 90 minutes)
 
@@ -50,7 +80,3 @@ The drill restores into an empty database and checks: every table has the same r
 ## 7. Pilot (2 or 3 reelmakers, real shoots)
 
 Acceptance (documentation section 12): advance rule, assignment and blocking, OTP check-in with live photos, uploads from Photos, extra time, payment recording, download link after Paid, automatic deletion. Keep a list of every defect; defects are fixed free for 30 days after go-live.
-
-## 8. Moving to Supabase later
-
-The database already speaks Supabase's dialect (`auth.uid()`, roles, RLS). Run `SKIP_AUTH_STUB=1 scripts/migrate.sh` against the Supabase project (Supabase provides the `auth` schema), copy `public.*` and the users, set `DATABASE_URL` to the Supabase connection string, and change the API's login to verify against Supabase Auth, or keep API-issued tokens against the copied `auth.users` hashes. `supabase/functions/` holds the Deno edge-function versions of check-in, uploads, share links and the sweep for that phase.

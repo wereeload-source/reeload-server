@@ -1,6 +1,6 @@
 import { CreateUser, UpdateUser } from './users.schemas.js';
 
-const base = { email: 'new@reelops.local', password: 'password-1', full_name: 'New Person' };
+const base = { email: 'new@reeload.local', password: 'password-1', full_name: 'New Person' };
 
 describe('user input', () => {
   it('needs a base city for a reelmaker only', () => {

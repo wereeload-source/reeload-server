@@ -8,19 +8,19 @@ import { AppModule } from '../src/app.module.js';
  * Needs DATABASE_URL; JWT_SECRET falls back to a test value. The seed password is the development one.
  */
 process.env.JWT_SECRET ??= 'test-secret-test-secret-test-secret-123';
-const PASSWORD = 'reelops123';
+const PASSWORD = process.env.SEED_PASSWORD ?? 'Reeload#2025';
 
 type Role = 'admin' | 'sales' | 'ops' | 'reelmaker' | 'accounts';
 const USERS: Record<Role, string> = {
-  admin: 'kavya@reelops.local',
-  sales: 'rohan@reelops.local',
-  ops: 'neha@reelops.local',
-  accounts: 'sanjay@reelops.local',
-  reelmaker: 'arjun@reelops.local',
+  admin: 'admin@reeload.test',
+  sales: 'sales@reeload.test',
+  ops: 'ops@reeload.test',
+  accounts: 'accounts@reeload.test',
+  reelmaker: 'reelmaker@reeload.test',
 };
 const ALL = Object.keys(USERS) as Role[];
 
-/** One safe GET per route group, with the roles allowed to call it (see the controllers' @Roles). */
+/** One safe GET per route group, with the roles allowed to call it (see access/access.policy.ts). */
 const ACCESS: [string, Role[]][] = [
   ['/users', ['admin']],
   ['/dashboard', ['admin']],
@@ -48,14 +48,16 @@ const ACCESS: [string, Role[]][] = [
 describe('role-wise login and access (e2e)', () => {
   let app: INestApplication;
   const tokens = {} as Record<Role, string>;
+  const refreshTokens = {} as Record<Role, string>;
   const http = () => request(app.getHttpServer());
 
   beforeAll(async () => {
     app = (await Test.createTestingModule({ imports: [AppModule] }).compile()).createNestApplication();
     await app.init();
     for (const role of ALL) {
-      const res = await http().post('/auth/login').send({ email: USERS[role], password: PASSWORD }).expect(201);
-      tokens[role] = res.body.token;
+      const res = await http().post('/auth/login').send({ email: USERS[role], password: PASSWORD }).expect(200);
+      tokens[role] = res.body.access_token;
+      refreshTokens[role] = res.body.refresh_token;
       expect(res.body.user.role).toBe(role);
     }
   });
@@ -63,7 +65,7 @@ describe('role-wise login and access (e2e)', () => {
 
   it('rejects a wrong password and an unknown email with the same message', async () => {
     const a = await http().post('/auth/login').send({ email: USERS.admin, password: 'nope-nope-nope' });
-    const b = await http().post('/auth/login').send({ email: 'nobody@reelops.local', password: 'nope-nope-nope' });
+    const b = await http().post('/auth/login').send({ email: 'nobody@reeload.test', password: 'nope-nope-nope' });
     expect(a.status).toBe(401);
     expect(b.status).toBe(401);
     expect(a.body.message).toBe(b.body.message);
@@ -92,12 +94,50 @@ describe('role-wise login and access (e2e)', () => {
   it('shows the agreed amount to sales but not to ops', async () => {
     const sales = await http().get('/jobs').set('Authorization', `Bearer ${tokens.sales}`).expect(200);
     const ops = await http().get('/jobs').set('Authorization', `Bearer ${tokens.ops}`).expect(200);
-    expect(sales.body.items.some((j: { agreed_amount: unknown }) => j.agreed_amount != null)).toBe(true);
+    expect(sales.body.items.some((j: { agreed_amount?: unknown }) => j.agreed_amount != null)).toBe(true);
     for (const j of ops.body.items) expect(j.agreed_amount ?? null).toBeNull();
   });
 
   it('gives a reelmaker only their own shoots', async () => {
     const res = await http().get('/me/shoots').set('Authorization', `Bearer ${tokens.reelmaker}`).expect(200);
     expect(res.body).toBeDefined();
+  });
+
+  it('renews a session once, then refuses the spent refresh token', async () => {
+    const first = await http().post('/auth/refresh').send({ refresh_token: refreshTokens.sales }).expect(200);
+    expect(first.body.access_token).toBeTruthy();
+    await http().post('/auth/refresh').send({ refresh_token: refreshTokens.sales }).expect(401);
+  });
+
+  it('signs out for real: the refresh token stops working', async () => {
+    const login = await http().post('/auth/login').send({ email: USERS.ops, password: PASSWORD }).expect(200);
+    await http().post('/auth/logout').set('Authorization', `Bearer ${login.body.access_token}`).send({ refresh_token: login.body.refresh_token }).expect(200);
+    await http().post('/auth/refresh').send({ refresh_token: login.body.refresh_token }).expect(401);
+  });
+
+  it('slows password guessing on one account without locking out colleagues on the same network', async () => {
+    const target = 'guess-target@reeload.test';
+    for (let i = 0; i < 5; i++) {
+      await http().post('/auth/login').send({ email: target, password: `wrong-${i}` }).expect(401);
+    }
+    await http().post('/auth/login').send({ email: target, password: 'wrong-again' }).expect(429);
+    // Same address, a different account: still allowed.
+    await http().post('/auth/login').send({ email: USERS.accounts, password: PASSWORD }).expect(200);
+  });
+
+  it('refuses bad input with a 400 instead of crashing', async () => {
+    await http().post('/auth/login').send({ email: 'not-an-email', password: 'x' }).expect(400);
+    await http().post('/auth/login').set('content-type', 'application/json').send('{"email":').expect(400);
+    await http().get('/jobs/not-a-uuid').set('Authorization', `Bearer ${tokens.admin}`).expect((res) => {
+      expect(res.status).toBeLessThan(500);
+    });
+    await http().get('/jobs?limit=-5').set('Authorization', `Bearer ${tokens.admin}`).expect((res) => {
+      expect(res.status).toBeLessThan(500);
+    });
+  });
+
+  it('never sends a password hash', async () => {
+    const res = await http().get('/users').set('Authorization', `Bearer ${tokens.admin}`).expect(200);
+    expect(JSON.stringify(res.body)).not.toMatch(/password/i);
   });
 });

@@ -1,126 +1,92 @@
 # reeload-server
 
-Backend for **ReelOps**, the reel-shoot operations system: Postgres (Neon now, Supabase later) with Row Level Security, a NestJS API, Cloudflare R2 for files and the WhatsApp Business Cloud API for check-in codes.
+Backend for **Reeload**, the reel-shoot operations system: a NestJS API on Postgres (Supabase) through Prisma, Cloudflare R2 for files and the WhatsApp Business Cloud API for check-in codes.
 
 The frontend lives in [`reeload-client`](https://github.com/wereeload-source/reeload-client).
 
-## What is here
+## How it is built
+
+Everything is TypeScript. The database holds **tables only**; every business rule and every permission lives in the API.
 
 ```
-supabase/
-  config.toml                 local Supabase settings
-  migrations/
-    ..._schema.sql            tables, enums, no-double-booking constraint
-    ..._logic.sql             audit log, balance, confirm_job, assign_job, price changes, release
-    ..._rls.sql               Row Level Security for every table (section 3 access matrix)
-  functions/
-    checkin/                  Reached → WhatsApp OTP → verify / ops release → two live photos
-    uploads/                  multipart uploads straight to R2, with resume (Uppy AwsS3 compatible)
-    share-links/              7-day client download links (create / revoke)
-    share-link-resolve/       public: token → presigned download URLs
-    retention-sweep/          daily: delete raw after 10 days, edited after 15–20
-  seed.sql                    one user per role + sample jobs (password: reelops123)
-  tests/rules.sql             database rule tests (access, advance, double booking, price approval, audit)
-scripts/test-db.sh            runs migrations + seed + rule tests on any Postgres
+Next.js client  ->  NestJS API (api/)  ->  Supabase Postgres (through Prisma)
+                    login, roles, rules
 ```
 
-## Rules enforced in the database
-
-| Rule | Where |
+| Concern | Where |
 | --- | --- |
-| Ops and reelmakers never see prices | money in `job_money`, `payments`, `price_changes`, RLS limited to Admin, Sales, Accounts |
-| No confirmation without an advance | `confirm_job()` |
-| No double booking, no booking over leave | exclusion constraint on `assignments`, check in `assign_job()` |
-| Price changes need Admin | `decide_price_change()`; agreed amount locked after confirmation |
-| Balance = agreed + approved changes − payments; Paid at zero | `job_balances` view, `payments_settle` trigger |
-| Audit log can't be edited or deleted | triggers on `audit_log` |
-| OTP: 6 digits, hashed, 10 min, 3 sends, 60 s wait, 5 attempts, ops release after 5 min | `functions/checkin` |
-| Download link only after Paid (admin earlier, logged), 7 days, revocable | `functions/share-links`, `share-link-resolve` |
-
-## Where it runs now: Neon
-
-The database is **Neon** (plain Postgres) for now; Supabase comes later. Neon has no Supabase Auth, Edge Functions or REST layer, so the **NestJS API in `api/`** is the backend:
-
-```
-Next.js client  ->  NestJS API (api/)  ->  Neon Postgres
-                    login + roles          tables, Row Level Security, workflow functions
-```
-
-- **Rules stay in the database.** For every request the API runs `set local role authenticated` and sets `request.jwt.claim.sub` to the signed-in user, so Row Level Security and `confirm_job()`, `assign_job()` and friends apply exactly as they did on Supabase. The API checks roles first; the database is the stricter second line.
-- **Login is the API's.** `POST /auth/login` checks the bcrypt hash in `auth.users` and returns a signed token. `db/neon/001_auth.sql` creates the `auth` schema stand-in (roles, `auth.users`, `auth.uid()`), using the same columns Supabase uses so users can move across unchanged.
-- **Moving to Supabase later** is mostly changing `DATABASE_URL`: run `SKIP_AUTH_STUB=1 scripts/migrate.sh` (Supabase has its own `auth` schema) and copy `auth.users` and `public.*`. `supabase/functions/` (the Deno Edge Functions) is kept for that phase; on Neon the API does their work.
+| Tables and enums | `api/prisma/schema.prisma` (migrations in `api/prisma/migrations`) |
+| Sign-in, access and refresh tokens, password hashing | `@nestjs/authentication` (`api/src/auth`, refresh tokens stored by `auth/refresh-token.store.ts`) |
+| Who may do what | `@nestjs/authorization`: one `AccessPolicy` class, `api/src/access/access.policy.ts`. A route with no rule is refused |
+| Who sees which rows (reelmakers only their own shoots; money only for Admin, Sales, Accounts) | the services (`jobs`, `money`, `shoots`, ...) |
+| Status changes, audit log, notices | `common/workflow.service.ts`, `audit.service.ts`, `notices.service.ts` (the audit log has no update or delete method) |
+| No double booking, no booking over leave | `assign/booking.service.ts`, under a Postgres advisory lock per reelmaker |
+| Advance before confirmation, price changes need Admin, Paid at zero balance | `jobs`, `sales`, `money` services |
+| Check-in code: 6 digits, hashed, 10 min, 3 sends, 60 s wait, 5 attempts, Ops release after 5 min | `checkin/checkin.rules.ts` and `checkin.service.ts` |
+| Download links: after Paid (Admin earlier, logged), 7 days, revocable, stored hashed | `share/` |
+| Daily clean-up (raw 10 days, edited 20) | `share/retention.service.ts` (`@nestjs/schedule`) |
+| Settings, health, rate limiting, config | `settings/`, `@nestjs/terminus`, `@nestjs/throttler`, `@nestjs/config` (validated in `config/env.ts`) |
 
 ## Getting started
 
-Needs Node 22, `psql`, and a Neon project (free plan is fine for development; use the **pooled** connection string).
+Needs Node 22+ and pnpm 10. No Docker and no cloud account are needed to develop: `pnpm db:local` runs a real Postgres on your machine.
 
 ```bash
-# 1. Database
-export DATABASE_URL='postgresql://USER:PASSWORD@HOST-pooler.REGION.aws.neon.tech/neondb?sslmode=require'
-scripts/migrate.sh --seed          # tables, security rules, workflow functions, demo users. Dev branch only.
-scripts/migrate.sh                 # on production: migrations only, no demo data
-
-# 2. API
 cd api
-pnpm install
-cp .env.example .env               # DATABASE_URL, JWT_SECRET (openssl rand -base64 48), CLIENT_URL
-pnpm start:dev                  # http://localhost:4000   (GET /health)
+pnpm install                       # also runs `prisma generate`
+cp .env.example .env               # then set DATABASE_URL to the local one below, JWT_SECRET and HASH_PEPPER
+pnpm db:local                      # terminal 1: Postgres on 127.0.0.1:54329 (leave it running)
+pnpm db:deploy                     # terminal 2: creates the tables
+pnpm db:seed                       # five demo accounts and three sample jobs. Never on production
+pnpm start:dev                     # http://localhost:4000   (GET /health)
 ```
 
-Demo logins (password `reelops123`): `kavya@` (Admin), `rohan@` (Sales), `neha@` (Ops), `sanjay@` (Accounts), `arjun@`, `priya@`, `vikram@` (Reelmakers), all `@reelops.local`. **Change them or do not seed production.**
+File uploads and check-in photos work locally too: `pnpm storage:local` (terminal 3) runs an S3-compatible stand-in for R2 on `http://127.0.0.1:9100`, with files in `api/.local-storage`. Set `R2_ENDPOINT=http://127.0.0.1:9100`, `R2_ACCESS_KEY_ID=local` and `R2_SECRET_ACCESS_KEY=local-secret` in `api/.env`. It checks signatures and answers CORS like the real R2 rule. The API refuses to start in production with `R2_ENDPOINT` set.
 
-```bash
-curl -s localhost:4000/auth/login -H 'content-type: application/json' \
-  -d '{"email":"kavya@reelops.local","password":"reelops123"}'     # -> { token, user }
-curl -s localhost:4000/me -H "authorization: Bearer $TOKEN"
-```
+Demo logins (password `Reeload#2025`, or `SEED_PASSWORD`): `admin@`, `sales@`, `ops@`, `accounts@`, `reelmaker@` `reeload.test`. **Do not seed production.**
+
+Production runs on **Supabase Postgres**: see [docs/GO-LIVE.md](docs/GO-LIVE.md) for the exact steps (connection strings, SSL certificate, locking down Supabase's Data API, WhatsApp and R2).
 
 ### Test it
 
 ```bash
-# Database rules: runs every migration on a throwaway local Postgres and the rule tests in supabase/tests
-PGHOST=localhost PGUSER=postgres scripts/test-db.sh
-
-# Every SQL string the API uses is checked against a migrated database (tables, columns, types)
-cd api && DATABASE_URL=... pnpm check:sql
-
-# API unit tests
-cd api && pnpm test
+cd api
+pnpm lint && pnpm build            # oxlint (type-aware) and a full type-check
+pnpm test                          # unit tests: check-in rules, signing, share links, ledger, time, job codes, throttling
+pnpm test:e2e                      # every role against the real routes (needs the migrated, seeded database)
 ```
 
-## Deploying to Supabase (later phase)
+## Security notes
 
-```bash
-supabase link --project-ref <ref>          # Pro plan, Mumbai (ap-south-1) region
-supabase db push
-supabase secrets set --env-file supabase/functions/.env
-supabase functions deploy
-```
+- Passwords are hashed by `@nestjs/authentication`'s `PasswordHasher` (and re-hashed automatically when its settings get stronger). They are never returned by any route; `GET /users` is covered by an e2e test for that.
+- A wrong password, an unknown email and a disabled account get the same 401 and take the same time.
+- Login is limited to 5 tries per 15 minutes per account and address, and 30 per address (`common/throttle.ts`).
+- Access tokens last 15 minutes; refresh tokens rotate, work once, and a reused one ends the whole sign-in.
+- Every route is refused unless `AccessPolicy` names a rule for it. Row rules (own shoots, money roles) live in the services.
+- Bad input is a 400 with a plain message (Zod schemas on every body and query); unknown errors are logged and returned as a generic 500, never a stack trace.
+- Check-in codes and download-link tokens are stored only as peppered SHA-256 hashes.
+- On Supabase, migration `lock_down_data_api` turns on row level security and revokes the `anon`/`authenticated` roles, so the tables cannot be read through Supabase's public REST API. **Every new table added later needs the same** (add `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` to its migration).
 
-R2: create a private bucket and an API token with Object Read & Write, then add a CORS rule allowing `PUT` from the app's origin and exposing the `ETag` header (needed for multipart uploads).
+## Known gaps
 
-Schedule the retention sweep daily with `pg_cron` + `pg_net`:
-
-```sql
-select cron.schedule('retention-sweep', '30 21 * * *',  -- 03:00 IST
-  $$ select net.http_post(
-       url := 'https://<ref>.functions.supabase.co/retention-sweep',
-       headers := jsonb_build_object('x-cron-secret', '<CRON_SECRET>')) $$);
-```
+- Not yet tried against a real Supabase project, a real R2 bucket or the real WhatsApp API (all three need your accounts; see GO-LIVE). Everything else, including every route and role, runs against a real Postgres in the e2e tests, and uploads run against the local R2 stand-in (`test/storage.e2e-spec.ts`).
+- `pg` prints a deprecation warning about overlapping queries from inside Prisma's own adapter (`@prisma/adapter-pg` 7.10), not from this code. Harmless until `pg@9`; update Prisma when a fix is released.
 
 ## Still to build (per the build plan)
 
 - Leave requests from the reelmaker app, reschedule flow, notifications fan-out for more events
-- Admin user invites (an Edge Function calling `auth.admin.inviteUserByEmail`)
-- Column-level hiding of the shoot brief from Accounts (today Accounts reads jobs through `jobs_accounts`)
+- Admin user invites by email
 
 ## API reference (Steps 1–2)
 
-All routes except `/health` and `POST /auth/login` need `Authorization: Bearer <token>`. Errors are `{ statusCode, message }`.
+All routes except `/health`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` and `GET /public/share/:token` need `Authorization: Bearer <access_token>`. Errors are `{ statusCode, message }`. Field names on the wire are `snake_case`.
 
 | Route | Roles | What it does |
 |---|---|---|
-| `POST /auth/login`, `GET /me`, `POST /auth/password` | any | Sign in, who am I, change own password |
+| `POST /auth/login` | public (5 tries per 15 min) | `{email, password}` returns `{access_token, refresh_token, expires_in, user}` |
+| `POST /auth/refresh` | public | `{refresh_token}`: swaps it for a new pair. Each refresh token works once; a reused one ends the whole sign-in |
+| `POST /auth/logout` | public | `{refresh_token}`: ends that sign-in on the server |
+| `GET /me`, `POST /auth/password` | any | Who am I; change own password (signs out every other device) |
 | `GET/POST /users`, `PATCH /users/:id`, `POST /users/:id/password` | admin | Create, disable, change role, reset password |
 | `GET /jobs`, `GET /jobs/:id` | admin, sales, ops (+ own jobs for reelmaker) | List (filter `status`, `q`, `city`, `from`, `to`) and detail. Money fields only for roles allowed to see them |
 | `POST /jobs` | admin, sales | Client (matched by phone) + job + amount + advance + optional confirm, all or nothing |
@@ -138,7 +104,7 @@ All routes except `/health` and `POST /auth/login` need `Authorization: Bearer <
 |---|---|---|
 | `GET /assign/queue` | admin, ops | Unassigned confirmed jobs, soonest first; `flagged` inside 48 h (setting `unassigned_flag_hours`); declined/dropped jobs return with the reason; plus jobs awaiting a reply |
 | `GET /jobs/:id/candidates` | admin, ops | Active reelmakers as `free`, `busy` or `leave` for that job's time, same-city first |
-| `POST /jobs/:id/assign` | admin, ops | Assign or reassign; refused on leave, on overlap (database exclusion constraint) or wrong job state |
+| `POST /jobs/:id/assign` | admin, ops | Assign or reassign; refused on leave, on overlap (checked under a per-reelmaker lock) or wrong job state |
 | `GET /reelmakers` | admin, ops, sales | Reelmaker list |
 | `GET/POST /leave`, `DELETE /leave/:id` | admin, ops | Leave; refused over a booked shoot |
 | `GET /notifications`, `POST /notifications/:id/read`, `POST /notifications/read-all` | any | Own in-app notices and unread count |
@@ -196,7 +162,7 @@ Set `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in 
 | `GET /ledger` (+ `ledger.csv`) | admin, accounts, sales (csv: admin, accounts) | One row per job with agreed, approved changes, advance, received, balance; totals cover every match, not just the page |
 | `GET /jobs/:id/payments` | admin, accounts, sales | Summary and payment history |
 | `POST /jobs/:id/payments` | admin, accounts | Record a payment. Refused if it is more than the balance, or the job is unconfirmed or cancelled. A released job becomes Paid when the balance reaches zero |
-| `GET /payments/:id/receipt` | admin, accounts, sales | Receipt number (`RCPT-RO-1042-AB12CD`) and everything the printable page needs |
+| `GET /payments/:id/receipt` | admin, accounts, sales | Receipt number (`RCPT-RL-1042-AB12CD`) and everything the printable page needs |
 
 ### Step 9: client download links and clean-up
 
@@ -205,7 +171,7 @@ Set `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in 
 | `POST /jobs/:id/share-links` | ops (after Paid), admin (once released, logged as `early_link`) | `{include_raw?}`; returns the link **once** (`CLIENT_URL/d/<token>`); only the token's hash is stored. Refused if there are no finished edited files. Raw files are included only if Admin allowed it in settings |
 | `GET /jobs/:id/share-links`, `POST /share-links/:id/revoke` | ops, admin | Links with `active` / `expired` / `revoked`; revoke is audited |
 | `GET /public/share/:token` | public | Client, job code, shoot date and 30-minute file URLs; 404 if invalid or revoked, 410 if expired (7 days, setting `share_link_days`) |
-| `POST /retention/sweep` | scheduler, header `x-cron-secret` | Deletes raw files after 10 days and edited after 20 (admin setting 15 to 20); `ops/retention-sweep.workflow.yml` is a ready GitHub Actions schedule |
+| *(scheduled, no route)* | the API itself | A `@Cron` job at 03:00 IST deletes raw files after 10 days and edited after 20 (admin setting 15 to 20). Run one API instance |
 
 ### Step 10: calendars, dashboard, audit, settings
 
