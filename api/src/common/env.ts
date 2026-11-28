@@ -44,4 +44,17 @@ export const env = {
       lang: process.env.WHATSAPP_TEMPLATE_LANG || 'en',
     };
   },
+  /** Cloudflare R2 (private bucket). Needed by uploads and download links. */
+  get r2(): { accountId: string; bucket: string; accessKeyId: string; secretAccessKey: string } {
+    return {
+      accountId: need('R2_ACCOUNT_ID'),
+      bucket: process.env.R2_BUCKET || 'reelops-files',
+      accessKeyId: need('R2_ACCESS_KEY_ID'),
+      secretAccessKey: need('R2_SECRET_ACCESS_KEY'),
+    };
+  },
+  /** Daily clean-up trigger secret (Step 9). */
+  get cronSecret(): string {
+    return need('CRON_SECRET');
+  },
 };

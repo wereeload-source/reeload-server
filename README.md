@@ -165,3 +165,16 @@ All routes except `/health` and `POST /auth/login` need `Authorization: Bearer <
 | `POST /jobs/:id/checkin/release` | admin, ops | `{reason}` (5+ characters), only 5 minutes after Reached; recorded with who and why |
 
 Codes are stored only as a salted hash (`HASH_PEPPER`). Without `WHATSAPP_TOKEN` the code is printed to the API log in development and refused in production.
+
+### Step 6: uploads (Cloudflare R2)
+
+Set `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in `api/.env`. The bucket stays private. Add a CORS rule allowing `PUT` from the app's origin and exposing the `ETag` header (multipart uploads need it).
+
+| Route | Roles | What it does |
+|---|---|---|
+| `POST /uploads` | reelmaker (accepted shoot), ops, admin | Start a multipart upload of `raw` or `edited` work, or resume the same file; Ops can set `on_behalf_of` |
+| `POST /uploads/:id/sign-part`, `GET /uploads/:id/parts` | owner | Signed URL for one part; parts already stored (resume) |
+| `POST /uploads/:id/complete`, `POST /uploads/:id/abort` | owner | Finish (job moves Reached to Uploaded) or cancel |
+| `POST /uploads/proof` | reelmaker | One signed PUT for a live check-in photo, then `complete` |
+| `GET /jobs/:id/uploads`, `GET /uploads/:id/download` | reelmaker (own), ops, admin | File list and a 15-minute download link |
+| `GET /review?overdue=true` | ops, admin | Shoots with raw (24 h) and edited (3 days) deadlines, overdue first |
