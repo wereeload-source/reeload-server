@@ -62,9 +62,9 @@ scripts/migrate.sh                 # on production: migrations only, no demo dat
 
 # 2. API
 cd api
-npm install
+pnpm install
 cp .env.example .env               # DATABASE_URL, JWT_SECRET (openssl rand -base64 48), CLIENT_URL
-npm run start:dev                  # http://localhost:4000   (GET /health)
+pnpm start:dev                  # http://localhost:4000   (GET /health)
 ```
 
 Demo logins (password `reelops123`): `kavya@` (Admin), `rohan@` (Sales), `neha@` (Ops), `sanjay@` (Accounts), `arjun@`, `priya@`, `vikram@` (Reelmakers), all `@reelops.local`. **Change them or do not seed production.**
@@ -82,10 +82,10 @@ curl -s localhost:4000/me -H "authorization: Bearer $TOKEN"
 PGHOST=localhost PGUSER=postgres scripts/test-db.sh
 
 # Every SQL string the API uses is checked against a migrated database (tables, columns, types)
-cd api && DATABASE_URL=... npm run check:sql
+cd api && DATABASE_URL=... pnpm check:sql
 
 # API unit tests
-cd api && npm test
+cd api && pnpm test
 ```
 
 ## Deploying to Supabase (later phase)

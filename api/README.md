@@ -7,9 +7,9 @@ The database, RLS, workflow functions and Edge Functions stay in `../supabase`.
 
 ```bash
 cd api
-npm install
+pnpm install
 cp .env.example .env   # PORT=4000, CLIENT_URL=http://localhost:3000
-npm run start:dev
+pnpm start:dev
 ```
 
 The API listens on http://localhost:4000 and allows CORS from `CLIENT_URL`
@@ -19,8 +19,8 @@ The API listens on http://localhost:4000 and allows CORS from `CLIENT_URL`
 
 | Command            | What it does                 |
 | ------------------ | ---------------------------- |
-| `npm run start:dev`| Start with watch mode        |
-| `npm run build`    | Compile to `dist/`           |
-| `npm run start:prod` | Run the compiled build     |
-| `npm test`         | Unit tests (Vitest)          |
-| `npm run test:e2e` | End-to-end tests (Vitest)    |
+| `pnpm start:dev`| Start with watch mode        |
+| `pnpm build`    | Compile to `dist/`           |
+| `pnpm start:prod` | Run the compiled build     |
+| `pnpm test`         | Unit tests (Vitest)          |
+| `pnpm test:e2e` | End-to-end tests (Vitest)    |

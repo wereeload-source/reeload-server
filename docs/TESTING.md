@@ -4,7 +4,7 @@ Run everything automated with one command, then do the phone checks by hand.
 
 ```bash
 PGHOST=localhost PGUSER=postgres scripts/test-db.sh          # database: rules, security, acceptance (throwaway local database)
-cd api && DATABASE_URL=... npm run check:sql && npm test     # every API query against a migrated database, then unit tests
+cd api && DATABASE_URL=... pnpm check:sql && pnpm test     # every API query against a migrated database, then unit tests
 SOURCE_URL=... TARGET_URL=... scripts/restore-drill.sh       # backup and restore (see docs/GO-LIVE.md)
 ```
 
@@ -41,5 +41,5 @@ Do these on the pilot devices before the first real shoot. Use Meta's test numbe
 
 These are things nobody has been able to run yet, so they are the first things to watch in the pilot:
 
-- The NestJS API was written and checked without installing its dependencies (`@nestjs/*`, `pg`, `zod`) in the authoring environment. Run `npm install && npm run build && npm test` in `api/` first; fix anything the compiler reports before anything else.
+- The NestJS API was written and checked without installing its dependencies (`@nestjs/*`, `pg`, `zod`) in the authoring environment. Run `pnpm install && pnpm build && pnpm test` in `api/` first; fix anything the compiler reports before anything else.
 - No test has talked to a real Neon database, a real R2 bucket or the real WhatsApp API. The R2 request signing is verified against the signature in AWS's published example, not against R2 itself.

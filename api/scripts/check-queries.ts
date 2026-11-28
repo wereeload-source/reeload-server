@@ -1,7 +1,7 @@
 /**
  * Checks every SQL string the API uses against a real, migrated database.
  *
- *   DATABASE_URL=postgres://... npm run check:sql
+ *   DATABASE_URL=postgres://... pnpm check:sql
  *
  * Each query is PREPAREd, so Postgres verifies the tables, columns, functions and parameter types
  * without running anything. It catches typos and schema drift that TypeScript cannot see.
