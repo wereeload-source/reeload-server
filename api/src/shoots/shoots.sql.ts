@@ -8,7 +8,7 @@ select a.id as assignment_id, a.status as assignment_status, a.reason, a.respond
   j.id as job_id, j.code, j.status as job_status, j.city, j.address, j.maps_url, j.starts_at, j.duration_minutes,
   j.onsite_contact_name, j.onsite_contact_phone, j.brief,
   c.name as client_name,
-  (select coalesce(sum(e.minutes), 0)::int from public.extra_time e where e.job_id = j.id) as extra_minutes,
+  public.job_extra_minutes(j.id) as extra_minutes,
   (select to_jsonb(k) - 'otp_hash' from (select ck.id, ck.verified_at, ck.completed_at, ck.otp_sends from public.checkins ck where ck.job_id = j.id and ck.reelmaker_id = auth.uid() order by ck.requested_at desc limit 1) k) as checkin
 from public.assignments a
 join public.jobs j on j.id = a.job_id
@@ -26,7 +26,7 @@ export const MY_SHOOT_SQL = `
 select a.id as assignment_id, a.status as assignment_status, a.reason,
   j.id as job_id, j.code, j.status as job_status, j.city, j.address, j.maps_url, j.starts_at, j.duration_minutes,
   j.onsite_contact_name, j.onsite_contact_phone, j.brief, c.name as client_name,
-  (select coalesce(sum(e.minutes), 0)::int from public.extra_time e where e.job_id = j.id) as extra_minutes
+  public.job_extra_minutes(j.id) as extra_minutes
 from public.assignments a
 join public.jobs j on j.id = a.job_id
 join public.clients c on c.id = j.client_id

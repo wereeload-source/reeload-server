@@ -332,3 +332,86 @@ begin
   end;
 end $$;
 reset role;
+
+-- ---------------------------------------------------------------------------
+-- send_back: Ops returns uploaded work to the reelmaker
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+declare v_job uuid; v_status public.job_status; n int;
+begin
+  select id into v_job from public.jobs where status = 'uploaded' limit 1;
+  if v_job is null then
+    -- Build one: a confirmed job assigned to Arjun, accepted, reached, uploaded.
+    insert into public.clients (name, phone) values ('Sendback Client', '9100000321');
+    insert into public.jobs (client_id, city, starts_at, duration_minutes, status, consent)
+    values ((select id from public.clients where phone = '9100000321'), 'Mumbai', now() + interval '40 days', 60, 'uploaded', true)
+    returning id into v_job;
+    insert into public.assignments (job_id, reelmaker_id, time_range, status)
+    values (v_job, '00000000-0000-0000-0000-000000000011', tstzrange(now() + interval '40 days', now() + interval '40 days 1 hour'), 'accepted');
+  end if;
+
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);  -- Sales
+  set local role authenticated;
+  begin
+    perform public.send_back(v_job, 'Colour looks off in clip 2');
+    raise exception 'FAIL: Sales sent work back';
+  exception when others then
+    if sqlerrm not like 'Only Operations or Admin%' then raise; end if;
+  end;
+
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', true);  -- Ops
+  begin
+    perform public.send_back(v_job, 'no');
+    raise exception 'FAIL: a vague note was accepted';
+  exception when others then
+    if sqlerrm not like 'Tell the reelmaker%' then raise; end if;
+  end;
+  perform public.send_back(v_job, 'Colour looks off in clip 2');
+  reset role;
+  select status into v_status from public.jobs where id = v_job;
+  if v_status <> 'reached' then raise exception 'FAIL: job is % after send back', v_status; end if;
+  select count(*) into n from public.notifications where title = 'Changes needed' and body like '%Colour looks off%';
+  if n <> 1 then raise exception 'FAIL: reelmaker was not told (% notices)', n; end if;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', true);
+  begin
+    perform public.send_back(v_job, 'Second time should fail');
+    raise exception 'FAIL: a reached job was sent back';
+  exception when others then
+    if sqlerrm not like 'Only uploaded jobs%' then raise; end if;
+  end;
+  reset role;
+  raise notice 'ok: send_back';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- A reelmaker's hours include extra time, but never the charge decision
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+declare v_job uuid; v_extra numeric; v_rows int; v_min int;
+begin
+  insert into public.clients (name, phone) values ('Hours Client', '9100000654');
+  insert into public.jobs (client_id, city, starts_at, duration_minutes, status, consent)
+  values ((select id from public.clients where phone = '9100000654'), 'Pune', now() + interval '50 days', 120, 'reached', true)
+  returning id into v_job;
+  insert into public.assignments (job_id, reelmaker_id, time_range, status)
+  values (v_job, '00000000-0000-0000-0000-000000000011', tstzrange(now() + interval '50 days', now() + interval '50 days 2 hours'), 'accepted');
+  insert into public.extra_time (job_id, minutes) values (v_job, 90);
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000011', true);  -- Arjun
+  select extra_hours into v_extra from public.reelmaker_hours
+   where reelmaker_id = '00000000-0000-0000-0000-000000000011'
+     and month = date_trunc('month', (now() + interval '50 days') at time zone 'Asia/Kolkata')::date;
+  if v_extra is distinct from 1.5 then raise exception 'FAIL: reelmaker sees % extra hours, expected 1.5', v_extra; end if;
+  select count(*) into v_rows from public.extra_time;
+  if v_rows <> 0 then raise exception 'FAIL: reelmaker can read extra_time rows (charge decisions)'; end if;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000012', true);  -- Priya, not on this job
+  select public.job_extra_minutes(v_job) into v_min;
+  if v_min <> 0 then raise exception 'FAIL: another reelmaker learned % extra minutes', v_min; end if;
+  reset role;
+  raise notice 'ok: extra hours visible to the reelmaker, charge decision not';
+end $$;
