@@ -6,8 +6,9 @@ cd "$(dirname "$0")/.."
 DB=${TEST_DB:-reelops_test}
 dropdb --if-exists "$DB" && createdb "$DB"
 run() { psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$1"; }
-run supabase/tests/auth_stub.sql
+run db/neon/001_auth.sql
 for f in supabase/migrations/*.sql; do echo "-- $f"; run "$f"; done
 run supabase/seed.sql
 psql -v ON_ERROR_STOP=1 -q -d "$DB" -f supabase/tests/rules.sql
+psql -v ON_ERROR_STOP=1 -q -d "$DB" -f supabase/tests/foundation.sql
 echo "All database rule tests passed."
