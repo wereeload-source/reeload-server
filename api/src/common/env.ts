@@ -57,4 +57,8 @@ export const env = {
   get cronSecret(): string {
     return need('CRON_SECRET');
   },
+  /** Where the client app lives; download links point at `${clientUrl}/d/<token>`. */
+  get clientUrl(): string {
+    return (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  },
 };

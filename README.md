@@ -197,3 +197,12 @@ Set `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in 
 | `GET /jobs/:id/payments` | admin, accounts, sales | Summary and payment history |
 | `POST /jobs/:id/payments` | admin, accounts | Record a payment. Refused if it is more than the balance, or the job is unconfirmed or cancelled. A released job becomes Paid when the balance reaches zero |
 | `GET /payments/:id/receipt` | admin, accounts, sales | Receipt number (`RCPT-RO-1042-AB12CD`) and everything the printable page needs |
+
+### Step 9: client download links and clean-up
+
+| Route | Roles | What it does |
+|---|---|---|
+| `POST /jobs/:id/share-links` | ops (after Paid), admin (once released, logged as `early_link`) | `{include_raw?}`; returns the link **once** (`CLIENT_URL/d/<token>`); only the token's hash is stored. Refused if there are no finished edited files. Raw files are included only if Admin allowed it in settings |
+| `GET /jobs/:id/share-links`, `POST /share-links/:id/revoke` | ops, admin | Links with `active` / `expired` / `revoked`; revoke is audited |
+| `GET /public/share/:token` | public | Client, job code, shoot date and 30-minute file URLs; 404 if invalid or revoked, 410 if expired (7 days, setting `share_link_days`) |
+| `POST /retention/sweep` | scheduler, header `x-cron-secret` | Deletes raw files after 10 days and edited after 20 (admin setting 15 to 20); `ops/retention-sweep.workflow.yml` is a ready GitHub Actions schedule |
