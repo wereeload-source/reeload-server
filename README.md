@@ -16,7 +16,7 @@ Next.js client  ->  NestJS API (api/)  ->  Supabase Postgres (through Prisma)
 | Concern | Where |
 | --- | --- |
 | Tables and enums | `api/prisma/schema.prisma` (migrations in `api/prisma/migrations`) |
-| Sign-in, access and refresh tokens, password hashing | `@nestjs/authentication` (`api/src/auth`, refresh tokens stored by `auth/refresh-token.store.ts`) |
+| Sign-in by httpOnly cookies, sessions, password hashing and reset | `@nestjs/jwt` + `@nestjs/passport` (`passport-jwt`) + `bcryptjs` (`api/src/auth`) |
 | Who may do what | `@nestjs/authorization`: one `AccessPolicy` class, `api/src/access/access.policy.ts`. A route with no rule is refused |
 | Who sees which rows (reelmakers only their own shoots; money only for Admin, Sales, Accounts) | the services (`jobs`, `money`, `shoots`, ...) |
 | Status changes, audit log, notices | `common/workflow.service.ts`, `audit.service.ts`, `notices.service.ts` (the audit log has no update or delete method) |
@@ -58,10 +58,14 @@ pnpm test:e2e                      # every role against the real routes (needs t
 
 ## Security notes
 
-- Passwords are hashed by `@nestjs/authentication`'s `PasswordHasher` (and re-hashed automatically when its settings get stronger). They are never returned by any route; `GET /users` is covered by an e2e test for that.
+- Passwords are hashed with bcrypt (cost 10). Hashes from before the switch (scrypt) still work and are re-hashed to bcrypt on the next sign-in. They are never returned by any route; `GET /users` is covered by an e2e test for that.
 - A wrong password, an unknown email and a disabled account get the same 401 and take the same time.
 - Login is limited to 5 tries per 15 minutes per account and address, and 30 per address (`common/throttle.ts`).
-- Access tokens last 15 minutes; refresh tokens rotate, work once, and a reused one ends the whole sign-in.
+- Sign-in is two **httpOnly cookies**, `access_token` (15 minutes, `ACCESS_TOKEN_TTL`, signed with `JWT_SECRET`) and `refresh_token` (7 days, `REFRESH_TOKEN_TTL`, signed with a different `JWT_REFRESH_SECRET`). Tokens are never in a response body and the `Authorization` header is not read. Cookie flags come from `COOKIE_SECURE`, `COOKIE_SAME_SITE`, `COOKIE_DOMAIN`, `COOKIE_PATH`; clearing uses the same flags as setting.
+- One `sessions` row per device (at most 5; a sixth sign-in ends the oldest). The refresh token is stored only as a bcrypt hash of its sha256 digest (bcrypt reads only the first 72 bytes, and every JWT on a session starts the same, so the digest is what makes a rotated-out token stop matching). Every refresh rotates both cookies on the same session; a token that does not match ends the session.
+- Every request re-reads the user and the session behind the access token, so disabling an account, signing out or changing a password takes effect at once, not when the token expires. Changing or resetting a password ends every session.
+- Password reset by WhatsApp code: `forgot-password` (same answer whether or not the account exists, 3 a hour per address and phone), `verify-otp` (5 tries, then a 5-minute ticket), `reset-password`. Codes and tokens are stored only as sha256 hashes and work once. The app has no screen for it yet (email is not set up).
+- Every request body is checked with `z.strictObject`: an unknown field is a 400.
 - Every route is refused unless `AccessPolicy` names a rule for it. Row rules (own shoots, money roles) live in the services.
 - Bad input is a 400 with a plain message (Zod schemas on every body and query); unknown errors are logged and returned as a generic 500, never a stack trace.
 - Check-in codes and download-link tokens are stored only as peppered SHA-256 hashes.
@@ -79,14 +83,17 @@ pnpm test:e2e                      # every role against the real routes (needs t
 
 ## API reference (Steps 1–2)
 
-All routes except `/health`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` and `GET /public/share/:token` need `Authorization: Bearer <access_token>`. Errors are `{ statusCode, message }`. Field names on the wire are `snake_case`.
+All routes except `/health`, the `/auth/login`, `/auth/refresh`, `/auth/logout` and password-reset routes, and `GET /public/share/:token` need the `access_token` cookie (send requests with credentials). JSON answers are wrapped as `{ data }` (the ledger CSV is sent as it is); errors are `{ statusCode, message }`. Field names in answers are `snake_case`; the auth request bodies use the names below.
 
 | Route | Roles | What it does |
 |---|---|---|
-| `POST /auth/login` | public (5 tries per 15 min) | `{email, password}` returns `{access_token, refresh_token, expires_in, user}` |
-| `POST /auth/refresh` | public | `{refresh_token}`: swaps it for a new pair. Each refresh token works once; a reused one ends the whole sign-in |
-| `POST /auth/logout` | public | `{refresh_token}`: ends that sign-in on the server |
-| `GET /me`, `POST /auth/password` | any | Who am I; change own password (signs out every other device) |
+| `POST /auth/login` | public (5 tries per 15 min) | `{loginType: EMAIL_PASSWORD | PHONE_PASSWORD, identifier, password}` sets both cookies and returns `{message, user}` |
+| `POST /auth/refresh` | public | No body: reads the `refresh_token` cookie, rotates both cookies. Each refresh token works once; a replayed one ends that session |
+| `POST /auth/logout` | public | Ends the session of the `refresh_token` cookie and clears both cookies |
+| `GET /auth/me` (also `GET /me`) | any | Who am I, read fresh from the database |
+| `GET /auth/sessions`, `DELETE /auth/sessions/:id`, `DELETE /auth/sessions` | any | List my devices; sign one out; sign out every device except this one |
+| `POST /auth/password` | any | `{current_password, new_password}`: change own password (signs out every device) |
+| `POST /auth/forgot-password`, `POST /auth/reset-password/verify-otp`, `GET /auth/reset-password/validate`, `POST /auth/reset-password` | public | Reset by WhatsApp code (see above) |
 | `GET/POST /users`, `PATCH /users/:id`, `POST /users/:id/password` | admin | Create, disable, change role, reset password |
 | `GET /jobs`, `GET /jobs/:id` | admin, sales, ops (+ own jobs for reelmaker) | List (filter `status`, `q`, `city`, `from`, `to`) and detail. Money fields only for roles allowed to see them |
 | `POST /jobs` | admin, sales | Client (matched by phone) + job + amount + advance + optional confirm, all or nothing |
@@ -168,7 +175,7 @@ Set `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in 
 
 | Route | Roles | What it does |
 |---|---|---|
-| `POST /jobs/:id/share-links` | ops (after Paid), admin (once released, logged as `early_link`) | `{include_raw?}`; returns the link **once** (`CLIENT_URL/d/<token>`); only the token's hash is stored. Refused if there are no finished edited files. Raw files are included only if Admin allowed it in settings |
+| `POST /jobs/:id/share-links` | ops (after Paid), admin (once released, logged as `early_link`) | `{include_raw?}`; returns the link **once** (`FRONTEND_URL/d/#<token>`, the first listed origin: after the `#`, so the static web host never sees it); only the token's hash is stored. Refused if there are no finished edited files. Raw files are included only if Admin allowed it in settings |
 | `GET /jobs/:id/share-links`, `POST /share-links/:id/revoke` | ops, admin | Links with `active` / `expired` / `revoked`; revoke is audited |
 | `GET /public/share/:token` | public | Client, job code, shoot date and 30-minute file URLs; 404 if invalid or revoked, 410 if expired (7 days, setting `share_link_days`) |
 | *(scheduled, no route)* | the API itself | A `@Cron` job at 03:00 IST deletes raw files after 10 days and edited after 20 (admin setting 15 to 20). Run one API instance |
