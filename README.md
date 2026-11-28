@@ -152,3 +152,16 @@ All routes except `/health` and `POST /auth/login` need `Authorization: Bearer <
 | `POST /me/shoots/:jobId/respond` | reelmaker | `{accept, reason}`; a decline needs a reason and the job returns to Operations |
 | `POST /me/shoots/:jobId/drop-out` | reelmaker | Give back an accepted shoot with a reason; Ops and Admin are told |
 | `GET /hours?month=YYYY-MM` | reelmaker (own), admin, ops | Booked and extra hours per reelmaker |
+
+### Step 5: check-in
+
+| Route | Roles | What it does |
+|---|---|---|
+| `GET /me/shoots/:jobId/checkin` | reelmaker | Which step they are on (`not_started`, `code_sent`, `photos`, `done`), sends left, seconds until resend |
+| `POST /me/shoots/:jobId/checkin/start` | reelmaker | "Reached": sends a 6-digit code to the on-site contact's WhatsApp (3 sends, 60 s apart) |
+| `POST /me/shoots/:jobId/checkin/verify` | reelmaker | `{code}`: 10-minute life, 5 wrong tries, then locked |
+| `POST /me/shoots/:jobId/checkin/complete` | reelmaker | `{selfie_upload_id, location_upload_id}`: both live photos finished; job becomes Reached with a server time stamp |
+| `GET /checkins/pending`, `GET /jobs/:id/checkin` | admin, ops | Who is waiting on a code; `release_in_seconds` counts down the 5 minutes |
+| `POST /jobs/:id/checkin/release` | admin, ops | `{reason}` (5+ characters), only 5 minutes after Reached; recorded with who and why |
+
+Codes are stored only as a salted hash (`HASH_PEPPER`). Without `WHATSAPP_TOKEN` the code is printed to the API log in development and refused in production.

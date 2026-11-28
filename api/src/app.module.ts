@@ -4,6 +4,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AssignModule } from './assign/assign.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { CheckinModule } from './checkin/checkin.module.js';
 import { CommonModule } from './common/common.module.js';
 import { HealthModule } from './health/health.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
@@ -32,6 +33,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     AssignModule,
     NotificationsModule,
     ShootsModule,
+    CheckinModule,
     HealthModule,
   ],
   controllers: [AppController],
