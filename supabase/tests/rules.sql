@@ -415,3 +415,62 @@ begin
   reset role;
   raise notice 'ok: extra hours visible to the reelmaker, charge decision not';
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- record_payment: Accounts records money, within the rules
+-- ---------------------------------------------------------------------------
+reset role;
+do $$
+declare v_job uuid; v_pay public.payments; v_status public.job_status;
+  function_error text;
+begin
+  insert into public.clients (name, phone) values ('Pay Client', '9100000765');
+  insert into public.jobs (client_id, city, starts_at, duration_minutes, status, consent)
+  values ((select id from public.clients where phone = '9100000765'), 'Pune', now() + interval '60 days', 60, 'released', true)
+  returning id into v_job;
+  insert into public.job_money (job_id, agreed_amount) values (v_job, 5000);
+  insert into public.payments (job_id, amount, method, is_advance) values (v_job, 1000, 'upi', true);
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', true);  -- Ops
+  begin
+    perform public.record_payment(v_job, 100, 'cash');
+    raise exception 'FAIL: Ops recorded a payment';
+  exception when others then
+    if sqlerrm not like 'Only Accounts or Admin%' then raise; end if;
+  end;
+
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', true);  -- Accounts
+  begin
+    perform public.record_payment(v_job, 4500, 'upi');
+    raise exception 'FAIL: overpayment accepted';
+  exception when others then
+    if sqlerrm not like 'That is more than the balance%' then raise; end if;
+  end;
+  begin
+    perform public.record_payment(v_job, 0, 'upi');
+    raise exception 'FAIL: zero payment accepted';
+  exception when others then
+    if sqlerrm not like 'Enter the amount%' then raise; end if;
+  end;
+  v_pay := public.record_payment(v_job, 4000, 'bank_transfer', '  UTR123  ');
+  if v_pay.reference <> 'UTR123' or v_pay.recorded_by <> '00000000-0000-0000-0000-000000000004' then
+    raise exception 'FAIL: payment details wrong (%, %)', v_pay.reference, v_pay.recorded_by;
+  end if;
+  reset role;
+  select status into v_status from public.jobs where id = v_job;
+  if v_status <> 'paid' then raise exception 'FAIL: settled job is % not paid', v_status; end if;
+
+  -- cancelled and unconfirmed jobs take no money
+  update public.jobs set status = 'cancelled' where id = v_job;
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', true);
+  begin
+    perform public.record_payment(v_job, 1, 'cash');
+    raise exception 'FAIL: payment on a cancelled job';
+  exception when others then
+    if sqlerrm not like '%is cancelled' then raise; end if;
+  end;
+  reset role;
+  raise notice 'ok: record_payment';
+end $$;

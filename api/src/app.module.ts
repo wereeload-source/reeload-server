@@ -8,6 +8,7 @@ import { CheckinModule } from './checkin/checkin.module.js';
 import { CommonModule } from './common/common.module.js';
 import { HealthModule } from './health/health.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
+import { LedgerModule } from './ledger/ledger.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { ReviewModule } from './review/review.module.js';
 import { SalesModule } from './sales/sales.module.js';
@@ -38,6 +39,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     CheckinModule,
     UploadsModule,
     ReviewModule,
+    LedgerModule,
     HealthModule,
   ],
   controllers: [AppController],

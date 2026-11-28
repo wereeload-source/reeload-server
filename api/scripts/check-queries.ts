@@ -21,6 +21,7 @@ const MODULES = [
   '../src/checkin/checkin.sql.js',
   '../src/uploads/uploads.sql.js',
   '../src/review/review.sql.js',
+  '../src/ledger/ledger.sql.js',
 ];
 
 const url = process.env.DATABASE_URL;

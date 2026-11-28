@@ -188,3 +188,12 @@ Set `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in 
 | `POST /jobs/:id/extra-time` | admin, ops | Add extra minutes; Sales and Admin are told |
 | `GET /extra-time`, `POST /extra-time/:id/decision` | sales, admin (list also ops) | Charge or not; charging creates a price change Admin must approve |
 | `GET /hours`, `GET /hours/:reelmakerId?month=` | admin, ops, reelmaker (own) | Booked + extra hours; the reelmaker sees extra minutes but never whether they were charged |
+
+### Step 8: accounts
+
+| Route | Roles | What it does |
+|---|---|---|
+| `GET /ledger` (+ `ledger.csv`) | admin, accounts, sales (csv: admin, accounts) | One row per job with agreed, approved changes, advance, received, balance; totals cover every match, not just the page |
+| `GET /jobs/:id/payments` | admin, accounts, sales | Summary and payment history |
+| `POST /jobs/:id/payments` | admin, accounts | Record a payment. Refused if it is more than the balance, or the job is unconfirmed or cancelled. A released job becomes Paid when the balance reaches zero |
+| `GET /payments/:id/receipt` | admin, accounts, sales | Receipt number (`RCPT-RO-1042-AB12CD`) and everything the printable page needs |
