@@ -1,6 +1,6 @@
 # reeload-server
 
-Backend for **ReelOps**, the reel-shoot operations system: a NestJS API on Postgres (Neon now, Supabase later) through Prisma, Cloudflare R2 for files and the WhatsApp Business Cloud API for check-in codes.
+Backend for **Reeload**, the reel-shoot operations system: a NestJS API on Postgres (Supabase) through Prisma, Cloudflare R2 for files and the WhatsApp Business Cloud API for check-in codes.
 
 The frontend lives in [`reeload-client`](https://github.com/wereeload-source/reeload-client).
 
@@ -9,7 +9,7 @@ The frontend lives in [`reeload-client`](https://github.com/wereeload-source/ree
 Everything is TypeScript. The database holds **tables only**; every business rule and every permission lives in the API.
 
 ```
-Next.js client  ->  NestJS API (api/)  ->  Neon Postgres (through Prisma)
+Next.js client  ->  NestJS API (api/)  ->  Supabase Postgres (through Prisma)
                     login, roles, rules
 ```
 
@@ -29,40 +29,46 @@ Next.js client  ->  NestJS API (api/)  ->  Neon Postgres (through Prisma)
 
 ## Getting started
 
-Needs Node 22, pnpm 10 and a Neon project (the free plan is fine; use the **pooled** connection string).
+Needs Node 22+ and pnpm 10. No Docker and no cloud account are needed to develop: `pnpm db:local` runs a real Postgres on your machine.
 
 ```bash
 cd api
 pnpm install                       # also runs `prisma generate`
-cp .env.example .env               # DATABASE_URL, JWT_SECRET (openssl rand -base64 48), HASH_PEPPER
-pnpm db:migrate                    # creates the tables (prisma migrate dev; use `pnpm db:deploy` in production)
-pnpm db:seed                       # five demo accounts and three sample jobs. Dev branch only
+cp .env.example .env               # then set DATABASE_URL to the local one below, JWT_SECRET and HASH_PEPPER
+pnpm db:local                      # terminal 1: Postgres on 127.0.0.1:54329 (leave it running)
+pnpm db:deploy                     # terminal 2: creates the tables
+pnpm db:seed                       # five demo accounts and three sample jobs. Never on production
 pnpm start:dev                     # http://localhost:4000   (GET /health)
 ```
 
-Demo logins (password `ReelOps#2025`, or `SEED_PASSWORD`): `admin@`, `sales@`, `ops@`, `accounts@`, `reelmaker@` `reelops.test`. **Do not seed production.**
+Demo logins (password `Reeload#2025`, or `SEED_PASSWORD`): `admin@`, `sales@`, `ops@`, `accounts@`, `reelmaker@` `reeload.test`. **Do not seed production.**
 
-```bash
-curl -s localhost:4000/auth/login -H 'content-type: application/json' \
-  -d '{"email":"admin@reelops.test","password":"ReelOps#2025"}'   # -> { access_token, refresh_token, expires_in, user }
-curl -s localhost:4000/me -H "authorization: Bearer $ACCESS_TOKEN"
-```
+Production runs on **Supabase Postgres**: see [docs/GO-LIVE.md](docs/GO-LIVE.md) for the exact steps (connection strings, SSL certificate, locking down Supabase's Data API, WhatsApp and R2).
 
 ### Test it
 
 ```bash
 cd api
-pnpm build                         # type-checks everything
-pnpm test                          # unit tests (pure rules: check-in, uploads signing, share links, ledger, time)
+pnpm lint && pnpm build            # oxlint (type-aware) and a full type-check
+pnpm test                          # unit tests: check-in rules, signing, share links, ledger, time, job codes, throttling
 pnpm test:e2e                      # every role against the real routes (needs the migrated, seeded database)
 ```
 
-## Known gaps (read before trusting it)
+## Security notes
 
-- The Prisma rewrite was written without being able to install packages, so **nothing in `api/` has been compiled or run yet**. Run `pnpm install && pnpm db:migrate && pnpm build` first and fix what the compiler reports. The new Nest 12 packages (`@nestjs/authentication`, `authorization`, `terminus`) are used from their documentation, so check their option names against the installed versions.
-- `pnpm-lock.yaml` is created by your first `pnpm install`; commit it.
-- No test has talked to a real Neon database, a real R2 bucket or the real WhatsApp API.
-- Access rules are enforced by the API only; there is no second line of defence in the database. Keep the Neon connection string secret and use a database user that only the API knows.
+- Passwords are hashed by `@nestjs/authentication`'s `PasswordHasher` (and re-hashed automatically when its settings get stronger). They are never returned by any route; `GET /users` is covered by an e2e test for that.
+- A wrong password, an unknown email and a disabled account get the same 401 and take the same time.
+- Login is limited to 5 tries per 15 minutes per account and address, and 30 per address (`common/throttle.ts`).
+- Access tokens last 15 minutes; refresh tokens rotate, work once, and a reused one ends the whole sign-in.
+- Every route is refused unless `AccessPolicy` names a rule for it. Row rules (own shoots, money roles) live in the services.
+- Bad input is a 400 with a plain message (Zod schemas on every body and query); unknown errors are logged and returned as a generic 500, never a stack trace.
+- Check-in codes and download-link tokens are stored only as peppered SHA-256 hashes.
+- On Supabase, migration `lock_down_data_api` turns on row level security and revokes the `anon`/`authenticated` roles, so the tables cannot be read through Supabase's public REST API. **Every new table added later needs the same** (add `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` to its migration).
+
+## Known gaps
+
+- Not yet tried against a real Supabase project, a real R2 bucket or the real WhatsApp API (all three need your accounts; see GO-LIVE). Everything else, including every route and role, runs against a real Postgres in the e2e tests.
+- `pg` prints a deprecation warning about overlapping queries from inside Prisma's own adapter (`@prisma/adapter-pg` 7.10), not from this code. Harmless until `pg@9`; update Prisma when a fix is released.
 
 ## Still to build (per the build plan)
 
@@ -154,7 +160,7 @@ Set `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in 
 | `GET /ledger` (+ `ledger.csv`) | admin, accounts, sales (csv: admin, accounts) | One row per job with agreed, approved changes, advance, received, balance; totals cover every match, not just the page |
 | `GET /jobs/:id/payments` | admin, accounts, sales | Summary and payment history |
 | `POST /jobs/:id/payments` | admin, accounts | Record a payment. Refused if it is more than the balance, or the job is unconfirmed or cancelled. A released job becomes Paid when the balance reaches zero |
-| `GET /payments/:id/receipt` | admin, accounts, sales | Receipt number (`RCPT-RO-1042-AB12CD`) and everything the printable page needs |
+| `GET /payments/:id/receipt` | admin, accounts, sales | Receipt number (`RCPT-RL-1042-AB12CD`) and everything the printable page needs |
 
 ### Step 9: client download links and clean-up
 

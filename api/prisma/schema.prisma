@@ -1,4 +1,4 @@
-// ReelOps data model. Tables hold data only: every business rule lives in the NestJS services.
+// Reeload data model. Tables hold data only: every business rule lives in the NestJS services.
 // After changing this file run `pnpm db:migrate` (creates and applies a migration) and `pnpm db:generate`.
 
 generator client {
@@ -152,7 +152,7 @@ model Client {
 
 model Job {
   id                 String    @id @default(uuid()) @db.Uuid
-  /// RO-1001 is number 1 (see jobCode in common/job-code.ts)
+  /// RL-1001 is number 1 (see jobCode in common/job-code.ts)
   number             Int       @unique @default(autoincrement())
   clientId           String    @db.Uuid
   client             Client    @relation(fields: [clientId], references: [id])

@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../common/audit.service.js';
 import { jobCode } from '../common/job-code.js';
 import { NoticesService } from '../common/notices.service.js';

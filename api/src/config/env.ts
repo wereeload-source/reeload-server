@@ -8,8 +8,12 @@ export const envSchema = z.object({
   /** Set to the number of proxies in front of the API (e.g. 1), or `true`. Leave empty when there is none. */
   TRUST_PROXY: z.string().optional(),
 
-  /** Neon (or any Postgres). Use the pooled connection string on Neon. */
+  /** Postgres. On Supabase: the transaction pooler string (port 6543). */
   DATABASE_URL: z.string().min(1),
+  /** Supabase: the direct/session string (port 5432), used only by `prisma migrate`. */
+  DIRECT_URL: z.string().optional(),
+  /** Supabase's SSL certificate (PEM; newlines may be written as \n). When set, the database certificate is verified. */
+  DATABASE_CA_CERT: z.string().optional(),
   DB_POOL_MAX: z.coerce.number().int().positive().default(10),
 
   /** At least 32 random characters. Signs access tokens. */
@@ -22,12 +26,12 @@ export const envSchema = z.object({
 
   WHATSAPP_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
-  WHATSAPP_OTP_TEMPLATE: z.string().default('reelops_checkin_otp'),
+  WHATSAPP_OTP_TEMPLATE: z.string().default('reeload_checkin_otp'),
   WHATSAPP_TEMPLATE_LANG: z.string().default('en'),
 
   /** Cloudflare R2 (private bucket). Needed by uploads and download links. */
   R2_ACCOUNT_ID: z.string().optional(),
-  R2_BUCKET: z.string().default('reelops-files'),
+  R2_BUCKET: z.string().default('reeload-files'),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
 });

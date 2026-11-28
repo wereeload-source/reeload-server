@@ -1,6 +1,6 @@
 # reeload-api
 
-NestJS 12 (TypeScript, ESM) API for ReelOps, on Postgres through Prisma 7. The full guide, rules table and route list are in the [repository README](../README.md).
+NestJS 12 (TypeScript, ESM) API for Reeload, on Postgres through Prisma 7. The full guide, rules table and route list are in the [repository README](../README.md).
 
 ```bash
 pnpm install && cp .env.example .env

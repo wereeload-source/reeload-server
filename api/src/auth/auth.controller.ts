@@ -13,9 +13,8 @@ import { AuthService } from './auth.service.js';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  /** 5 tries per 15 minutes from one address. */
+  /** 5 tries per 15 minutes per account and address, 30 per address (common/throttle.ts). */
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
   @Post('auth/login')
   @HttpCode(200)
   login(@Body({ schema: Login }) body: LoginInput) {

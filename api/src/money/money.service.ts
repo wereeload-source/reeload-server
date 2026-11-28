@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AuditService } from '../common/audit.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { jobCode } from '../common/job-code.js';
 import type { Db } from '../prisma/db.js';
@@ -21,14 +22,18 @@ export interface MoneySummary {
  */
 @Injectable()
 export class MoneyService {
-  /** Summaries for many jobs at once (three grouped queries, however many jobs). */
+  constructor(private readonly audit: AuditService) {}
+
+  /**
+   * Summaries for many jobs at once (four grouped queries, however many jobs). The queries run one after
+   * another on purpose: `db` is often a transaction, which has a single connection that cannot run two at once.
+   */
   async summaries(db: Db, jobIds: string[]): Promise<Map<string, MoneySummary>> {
-    const [money, changes, payments, advances] = await Promise.all([
-      db.jobMoney.findMany({ where: { jobId: { in: jobIds } } }),
-      db.priceChange.groupBy({ by: ['jobId'], where: { jobId: { in: jobIds }, status: 'approved' }, _sum: { delta: true } }),
-      db.payment.groupBy({ by: ['jobId'], where: { jobId: { in: jobIds } }, _sum: { amount: true } }),
-      db.payment.groupBy({ by: ['jobId'], where: { jobId: { in: jobIds }, isAdvance: true }, _sum: { amount: true } }),
-    ]);
+    if (!jobIds.length) return new Map();
+    const money = await db.jobMoney.findMany({ where: { jobId: { in: jobIds } } });
+    const changes = await db.priceChange.groupBy({ by: ['jobId'], where: { jobId: { in: jobIds }, status: 'approved' }, _sum: { delta: true } });
+    const payments = await db.payment.groupBy({ by: ['jobId'], where: { jobId: { in: jobIds } }, _sum: { amount: true } });
+    const advances = await db.payment.groupBy({ by: ['jobId'], where: { jobId: { in: jobIds }, isAdvance: true }, _sum: { amount: true } });
     const agreed = new Map(money.map((m) => [m.jobId, m.agreedAmount]));
     const delta = new Map(changes.map((c) => [c.jobId, c._sum.delta ?? ZERO]));
     const received = new Map(payments.map((p) => [p.jobId, p._sum.amount ?? ZERO]));
@@ -56,7 +61,9 @@ export class MoneyService {
   /** When a released job's balance reaches zero it becomes Paid. */
   async settleIfPaid(db: Db, jobId: string): Promise<void> {
     const balance = await this.balance(db, jobId);
-    if (balance && balance.lte(0)) await db.job.updateMany({ where: { id: jobId, status: 'released' }, data: { status: 'paid' } });
+    if (!balance || balance.gt(0)) return;
+    const done = await db.job.updateMany({ where: { id: jobId, status: 'released' }, data: { status: 'paid' } });
+    if (done.count) await this.audit.record(db, null, 'status', 'jobs', jobId, { from: 'released', to: 'paid', why: 'balance reached zero' });
   }
 
   /** One row per job with its client and money: the accounts ledger (and the summary shown on a job). */

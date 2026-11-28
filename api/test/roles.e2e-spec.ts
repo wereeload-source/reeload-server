@@ -8,15 +8,15 @@ import { AppModule } from '../src/app.module.js';
  * Needs DATABASE_URL; JWT_SECRET falls back to a test value. The seed password is the development one.
  */
 process.env.JWT_SECRET ??= 'test-secret-test-secret-test-secret-123';
-const PASSWORD = process.env.SEED_PASSWORD ?? 'ReelOps#2025';
+const PASSWORD = process.env.SEED_PASSWORD ?? 'Reeload#2025';
 
 type Role = 'admin' | 'sales' | 'ops' | 'reelmaker' | 'accounts';
 const USERS: Record<Role, string> = {
-  admin: 'admin@reelops.test',
-  sales: 'sales@reelops.test',
-  ops: 'ops@reelops.test',
-  accounts: 'accounts@reelops.test',
-  reelmaker: 'reelmaker@reelops.test',
+  admin: 'admin@reeload.test',
+  sales: 'sales@reeload.test',
+  ops: 'ops@reeload.test',
+  accounts: 'accounts@reeload.test',
+  reelmaker: 'reelmaker@reeload.test',
 };
 const ALL = Object.keys(USERS) as Role[];
 
@@ -65,7 +65,7 @@ describe('role-wise login and access (e2e)', () => {
 
   it('rejects a wrong password and an unknown email with the same message', async () => {
     const a = await http().post('/auth/login').send({ email: USERS.admin, password: 'nope-nope-nope' });
-    const b = await http().post('/auth/login').send({ email: 'nobody@reelops.test', password: 'nope-nope-nope' });
+    const b = await http().post('/auth/login').send({ email: 'nobody@reeload.test', password: 'nope-nope-nope' });
     expect(a.status).toBe(401);
     expect(b.status).toBe(401);
     expect(a.body.message).toBe(b.body.message);
@@ -113,5 +113,31 @@ describe('role-wise login and access (e2e)', () => {
     const login = await http().post('/auth/login').send({ email: USERS.ops, password: PASSWORD }).expect(200);
     await http().post('/auth/logout').set('Authorization', `Bearer ${login.body.access_token}`).send({ refresh_token: login.body.refresh_token }).expect(200);
     await http().post('/auth/refresh').send({ refresh_token: login.body.refresh_token }).expect(401);
+  });
+
+  it('slows password guessing on one account without locking out colleagues on the same network', async () => {
+    const target = 'guess-target@reeload.test';
+    for (let i = 0; i < 5; i++) {
+      await http().post('/auth/login').send({ email: target, password: `wrong-${i}` }).expect(401);
+    }
+    await http().post('/auth/login').send({ email: target, password: 'wrong-again' }).expect(429);
+    // Same address, a different account: still allowed.
+    await http().post('/auth/login').send({ email: USERS.accounts, password: PASSWORD }).expect(200);
+  });
+
+  it('refuses bad input with a 400 instead of crashing', async () => {
+    await http().post('/auth/login').send({ email: 'not-an-email', password: 'x' }).expect(400);
+    await http().post('/auth/login').set('content-type', 'application/json').send('{"email":').expect(400);
+    await http().get('/jobs/not-a-uuid').set('Authorization', `Bearer ${tokens.admin}`).expect((res) => {
+      expect(res.status).toBeLessThan(500);
+    });
+    await http().get('/jobs?limit=-5').set('Authorization', `Bearer ${tokens.admin}`).expect((res) => {
+      expect(res.status).toBeLessThan(500);
+    });
+  });
+
+  it('never sends a password hash', async () => {
+    const res = await http().get('/users').set('Authorization', `Bearer ${tokens.admin}`).expect(200);
+    expect(JSON.stringify(res.body)).not.toMatch(/password/i);
   });
 });

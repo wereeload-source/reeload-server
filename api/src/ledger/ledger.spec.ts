@@ -16,7 +16,7 @@ describe('ledger totals', () => {
 });
 
 describe('receipt numbers', () => {
-  it('is the job code plus six characters of the payment id', () => expect(receiptNumber('RO-1042', 'ab12cd34-0000-0000-0000-000000000000')).toBe('RCPT-RO-1042-AB12CD'));
+  it('is the job code plus six characters of the payment id', () => expect(receiptNumber('RL-1042', 'ab12cd34-0000-0000-0000-000000000000')).toBe('RCPT-RL-1042-AB12CD'));
 });
 
 describe('CSV export', () => {
@@ -29,7 +29,7 @@ describe('CSV export', () => {
     expect(csvCell('-200.00')).toBe('-200.00');
   });
   it('writes a header and one line per job', () => {
-    const csv = toCsv([{ key: 'code', label: 'Job' }, { key: 'balance', label: 'Balance' }], [{ code: 'RO-1', balance: '10.00' }]);
-    expect(csv).toBe('Job,Balance\r\nRO-1,10.00\r\n');
+    const csv = toCsv([{ key: 'code', label: 'Job' }, { key: 'balance', label: 'Balance' }], [{ code: 'RL-1', balance: '10.00' }]);
+    expect(csv).toBe('Job,Balance\r\nRL-1,10.00\r\n');
   });
 });

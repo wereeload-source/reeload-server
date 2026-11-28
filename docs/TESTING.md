@@ -42,5 +42,5 @@ Do these on the pilot devices before the first real shoot. Use Meta's test numbe
 ## Known gaps
 
 - The API was rewritten to Prisma without being able to install dependencies, so nothing has been compiled or run yet. Run `pnpm install && pnpm build && pnpm test` in `api/` first and fix what the compiler reports.
-- The earlier database-level rule tests were removed together with the SQL rules; their cases (advance, double booking, price approval, payments never above the balance, ops cannot see money) now need service or e2e tests. Writing those against a Neon branch is the next testing task.
-- No test has talked to a real Neon database, a real R2 bucket or the real WhatsApp API.
+- The earlier database-level rule tests were removed together with the SQL rules; their cases (advance, double booking, price approval, payments never above the balance, ops cannot see money) now need service or e2e tests. Writing more of those as e2e tests (they run against `pnpm db:local`) is the next testing task.
+- No test has talked to the real Supabase project, a real R2 bucket or the real WhatsApp API (the e2e tests run on a real local Postgres).

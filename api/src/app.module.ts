@@ -13,6 +13,7 @@ import { CheckinModule } from './checkin/checkin.module.js';
 import { ApiErrorFilter } from './common/api-error.filter.js';
 import { CommonModule } from './common/common.module.js';
 import { SnakeCaseInterceptor } from './common/snake-case.interceptor.js';
+import { THROTTLERS } from './common/throttle.js';
 import { type Env, validateEnv } from './config/env.js';
 import { HealthModule } from './health/health.module.js';
 import { InsightsModule } from './insights/insights.module.js';
@@ -42,16 +43,16 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
-    // Login is limited separately and more tightly on its own route.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
+    // Password tries have their own, tighter limits (common/throttle.ts).
+    ThrottlerModule.forRoot(THROTTLERS),
     // Signs users in and tells the rest of the app who they are: short access tokens plus rotating refresh tokens.
     AuthenticationModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => ({
         accessToken: {
           key: config.getOrThrow('JWT_SECRET'),
-          issuer: 'reelops-api',
-          audience: 'reelops',
+          issuer: 'reeload-api',
+          audience: 'reeload',
           ttl: config.getOrThrow('ACCESS_TOKEN_TTL'),
         },
         refreshToken: { ttl: config.getOrThrow('REFRESH_TOKEN_TTL'), absoluteTtl: '30d' },

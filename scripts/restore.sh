@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Restores a backup into an EMPTY database.
 #   TARGET_URL=... scripts/restore.sh backup.dump
-# Create the empty database (or a Neon branch) first, then point DATABASE_URL at it.
+# Create the empty database (a spare Supabase project, or a local `pnpm db:local`) first, then point DATABASE_URL at it.
 set -euo pipefail
 : "${TARGET_URL:?Set TARGET_URL to the empty database to restore into}"
 file="${1:?Usage: restore.sh backup.dump}"

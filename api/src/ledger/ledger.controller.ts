@@ -29,7 +29,7 @@ export class LedgerController {
   @Get('ledger.csv')
   @Can(AccessPolicy, 'exportLedger')
   @Header('content-type', 'text/csv; charset=utf-8')
-  @Header('content-disposition', 'attachment; filename="reelops-ledger.csv"')
+  @Header('content-disposition', 'attachment; filename="reeload-ledger.csv"')
   async csv(@Query({ schema: LedgerQuery }) q: LedgerQueryInput) {
     const { items } = await this.ledger.ledger({ ...q, limit: 500, offset: 0 });
     return toCsv(CSV_COLUMNS, toWire(items) as Record<string, unknown>[]);

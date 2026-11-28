@@ -177,6 +177,9 @@ export class CheckinService {
     });
     if (!c) throw new NotFoundException('No check-in yet');
     const { reelmaker, releasedBy, ...rest } = c;
-    return { ...rest, reelmaker: reelmaker.fullName, releasedByName: releasedBy?.fullName ?? null };
+    return {
+      ...rest, reelmaker: reelmaker.fullName, releasedByName: releasedBy?.fullName ?? null,
+      releaseInSeconds: c.verifiedAt ? 0 : releaseInSeconds(c.requestedAt, Date.now()),
+    };
   }
 }

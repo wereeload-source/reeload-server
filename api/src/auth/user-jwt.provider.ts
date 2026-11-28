@@ -12,7 +12,7 @@ export const AUTH_USER_SELECT = { id: true, email: true, fullName: true, phone: 
 @Injectable()
 export class UserJwtProvider extends JwtBearerProvider<AuthUser> {
   constructor(private readonly prisma: PrismaService, registry: AuthenticationRegistry) {
-    super({ realm: 'reelops' });
+    super({ realm: 'reeload' });
     registry.registerProvider(this, { order: 1 });
   }
 
