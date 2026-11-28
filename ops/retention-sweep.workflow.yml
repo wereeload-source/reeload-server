@@ -1,0 +1,19 @@
+# Daily clean-up: deletes raw files after 10 days and edited reels after 20 (settings), counted from the shoot date.
+# Neon has no built-in scheduler, so something outside calls the API once a day.
+#
+# To use GitHub Actions: copy this file to .github/workflows/retention-sweep.yml in this repo, then add
+# two repository secrets: API_URL (e.g. https://api.yourdomain.com) and CRON_SECRET (same value as in api/.env).
+# Any scheduler that can send an HTTP POST with the header works just as well (cron-job.org, Render cron, ...).
+name: Retention sweep
+on:
+  schedule:
+    - cron: '30 21 * * *' # 03:00 IST
+  workflow_dispatch: {}
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the API
+        run: |
+          curl --fail --silent --show-error -X POST "${{ secrets.API_URL }}/retention/sweep" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"

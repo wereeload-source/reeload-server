@@ -14,6 +14,7 @@ import { ReviewModule } from './review/review.module.js';
 import { SalesModule } from './sales/sales.module.js';
 import { ShootsModule } from './shoots/shoots.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
+import { ShareModule } from './share/share.module.js';
 import { UsersModule } from './users/users.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -40,6 +41,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     UploadsModule,
     ReviewModule,
     LedgerModule,
+    ShareModule,
     HealthModule,
   ],
   controllers: [AppController],
