@@ -1,5 +1,5 @@
 import { Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { CurrentUser } from '@nestjs/authentication';
+import { CurrentUser } from '../auth/decorators.js';
 import { Can } from '@nestjs/authorization';
 import { z } from 'zod';
 import type { AuthUser } from '../common/types.js';

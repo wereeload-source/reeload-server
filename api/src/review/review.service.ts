@@ -70,7 +70,7 @@ export class ReviewService {
       if (!job || job.status !== 'uploaded') throw new BadRequestException('Only uploaded jobs can be sent back');
       const updated = await this.workflow.transition(tx, jobId, 'reached', user.id);
       const rm = await tx.assignment.findFirst({ where: { jobId, status: 'accepted' }, select: { reelmakerId: true } });
-      if (rm) await this.notices.toUser(tx, rm.reelmakerId, 'Changes needed', `${jobCode(job.number)}: ${note}`, `/m/shoots/${jobId}`);
+      if (rm) await this.notices.toUser(tx, rm.reelmakerId, 'Changes needed', `${jobCode(job.number)}: ${note}`, `/m/shoot?id=${jobId}`);
       await this.audit.record(tx, user.id, 'send_back', 'jobs', jobId, { note });
       return updated;
     }, TX_OPTIONS);

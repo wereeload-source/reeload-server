@@ -2,14 +2,14 @@ import { z } from 'zod';
 
 const instant = z.string().datetime({ offset: true });
 
-export const AssignJob = z.object({
+export const AssignJob = z.strictObject({
   reelmaker_id: z.string().uuid(),
   /** Why the shoot is being reassigned (kept on the cancelled booking). */
   reason: z.string().trim().max(300).optional().nullable(),
 });
 
 export const LeaveInput = z
-  .object({
+  .strictObject({
     reelmaker_id: z.string().uuid(),
     from: instant,
     to: instant,

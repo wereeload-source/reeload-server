@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-export const SendBack = z.object({ note: z.string().trim().min(5, 'Tell the reelmaker what to fix').max(500) });
+export const SendBack = z.strictObject({ note: z.string().trim().min(5, 'Tell the reelmaker what to fix').max(500) });
 
-export const AddExtraTime = z.object({
+export const AddExtraTime = z.strictObject({
   minutes: z.number().int().positive().max(24 * 60),
   note: z.string().trim().max(300).optional().nullable(),
 });
@@ -13,7 +13,7 @@ export const ExtraTimeQuery = z.object({
 });
 
 export const DecideExtraTime = z
-  .object({ charge: z.boolean(), amount: z.number().positive().optional() })
+  .strictObject({ charge: z.boolean(), amount: z.number().positive().optional() })
   .refine((o) => !o.charge || o.amount !== undefined, { message: 'Enter the extra amount', path: ['amount'] });
 
 export const HoursDetailQuery = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/).optional() });

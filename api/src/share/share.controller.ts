@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
-import { CurrentUser, Public } from '@nestjs/authentication';
+import { CurrentUser, Public } from '../auth/decorators.js';
 import { Can } from '@nestjs/authorization';
 import { Throttle } from '@nestjs/throttler';
 import { AccessPolicy } from '../access/access.policy.js';

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const uuid = z.string().uuid();
 
-export const CreateUpload = z.object({
+export const CreateUpload = z.strictObject({
   job_id: uuid,
   kind: z.enum(['raw', 'edited']),
   file_name: z.string().trim().min(1).max(255),
@@ -12,13 +12,13 @@ export const CreateUpload = z.object({
   on_behalf_of: uuid.optional().nullable(),
 });
 
-export const SignPart = z.object({ part_number: z.number().int().min(1).max(10_000) });
+export const SignPart = z.strictObject({ part_number: z.number().int().min(1).max(10_000) });
 
-export const CompleteUpload = z.object({
+export const CompleteUpload = z.strictObject({
   parts: z.array(z.object({ PartNumber: z.number().int().min(1).max(10_000), ETag: z.string().min(1).max(200) })).max(10_000).default([]),
 });
 
-export const ProofPhoto = z.object({
+export const ProofPhoto = z.strictObject({
   job_id: uuid,
   which: z.enum(['selfie', 'location']),
   size_bytes: z.number().int().min(0).max(25 * 1024 ** 2).optional(),

@@ -4,7 +4,7 @@
  */
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
-import { PasswordHasher } from '@nestjs/authentication';
+import { Passwords } from '../auth/passwords.js';
 import { AppModule } from '../app.module.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -21,7 +21,7 @@ const USERS = [
 const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
 try {
   const prisma = app.get(PrismaService);
-  const hasher = app.get(PasswordHasher);
+  const hasher = app.get(Passwords);
   const passwordHash = await hasher.hash(DEMO_PASSWORD);
 
   for (const u of USERS) {

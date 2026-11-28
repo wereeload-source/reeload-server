@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 export const RespondShoot = z
-  .object({ accept: z.boolean(), reason: z.string().trim().max(300).optional().nullable() })
+  .strictObject({ accept: z.boolean(), reason: z.string().trim().max(300).optional().nullable() })
   .refine((o) => o.accept || (o.reason && o.reason.length >= 3), { message: 'Tell Operations why you cannot do this shoot', path: ['reason'] });
 
-export const DropOut = z.object({ reason: z.string().trim().min(3, 'Give a reason').max(300) });
+export const DropOut = z.strictObject({ reason: z.string().trim().min(3, 'Give a reason').max(300) });
 
 export const ShootsQuery = z.object({
   /** upcoming (default), past, or all */

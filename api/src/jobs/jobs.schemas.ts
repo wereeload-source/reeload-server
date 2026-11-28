@@ -5,14 +5,14 @@ const text = (max = 500) => z.string().trim().max(max);
 const optText = (max = 500) => text(max).optional().nullable();
 const instant = z.string().datetime({ offset: true });
 
-export const ClientInput = z.object({
+export const ClientInput = z.strictObject({
   name: text(120).min(1),
   phone: text(20).min(6, 'Enter the client phone number'),
   whatsapp: text(20).optional(),
   city: text(80).optional(),
 });
 
-export const JobDetails = z.object({
+export const JobDetails = z.strictObject({
   city: text(80).min(1),
   address: optText(300),
   maps_url: z.string().trim().url().max(500).optional().nullable(),
@@ -24,13 +24,13 @@ export const JobDetails = z.object({
   consent: z.boolean().optional(),
 });
 
-export const AdvanceInput = z.object({
+export const AdvanceInput = z.strictObject({
   amount: z.number().positive(),
   method: z.enum(['upi', 'bank_transfer', 'cash']).default('upi'),
   reference: optText(120),
 });
 
-export const CreateJob = z.object({
+export const CreateJob = z.strictObject({
   client: ClientInput,
   job: JobDetails,
   agreed_amount: z.number().positive().optional(),
@@ -41,9 +41,9 @@ export const CreateJob = z.object({
 
 export const UpdateJob = JobDetails.partial().refine((o) => Object.keys(o).length > 0, 'Nothing to update');
 
-export const AgreedAmount = z.object({ agreed_amount: z.number().positive() });
+export const AgreedAmount = z.strictObject({ agreed_amount: z.number().positive() });
 
-export const Reschedule = z.object({
+export const Reschedule = z.strictObject({
   starts_at: instant,
   duration_minutes: z.number().int().positive().max(24 * 60).optional(),
   reason: optText(300),
