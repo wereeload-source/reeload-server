@@ -13,7 +13,7 @@ describe('who may make a download link', () => {
 
 describe('link state', () => {
   const now = Date.parse('2026-12-10T00:00:00Z');
-  it('is active before the expiry', () => expect(linkState({ revoked_at: null, expires_at: '2026-12-17T00:00:00Z' }, now)).toBe('active'));
-  it('expires after 7 days', () => expect(linkState({ revoked_at: null, expires_at: '2026-12-09T00:00:00Z' }, now)).toBe('expired'));
-  it('revoked wins over everything', () => expect(linkState({ revoked_at: '2026-12-01T00:00:00Z', expires_at: '2026-12-17T00:00:00Z' }, now)).toBe('revoked'));
+  it('is active before the expiry', () => expect(linkState({ revokedAt: null, expiresAt: '2026-12-17T00:00:00Z' }, now)).toBe('active'));
+  it('expires after 7 days', () => expect(linkState({ revokedAt: null, expiresAt: '2026-12-09T00:00:00Z' }, now)).toBe('expired'));
+  it('revoked wins over everything', () => expect(linkState({ revokedAt: '2026-12-01T00:00:00Z', expiresAt: '2026-12-17T00:00:00Z' }, now)).toBe('revoked'));
 });

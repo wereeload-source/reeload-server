@@ -1,7 +1,8 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { CurrentUser, Roles } from '../common/decorators.js';
+import { CurrentUser } from '@nestjs/authentication';
+import { Can } from '@nestjs/authorization';
+import { AccessPolicy } from '../access/access.policy.js';
 import type { AuthUser } from '../common/types.js';
-import { ZodPipe } from '../common/zod.pipe.js';
 import {
   DropOut, HoursQuery, RespondShoot, ShootsQuery,
   type DropOutInput, type HoursQueryInput, type RespondShootInput, type ShootsQueryInput,
@@ -10,39 +11,38 @@ import { ShootsService } from './shoots.service.js';
 
 const uuid = () => new ParseUUIDPipe();
 
-/** The reelmaker app: "my shoots". Money is never part of these responses. */
+/** The reelmaker app: "my shoots". */
 @Controller()
 export class ShootsController {
   constructor(private readonly shoots: ShootsService) {}
 
   @Get('me/shoots')
-  @Roles('reelmaker')
-  mine(@CurrentUser() user: AuthUser, @Query(new ZodPipe(ShootsQuery)) q: ShootsQueryInput) {
+  @Can(AccessPolicy, 'workShoots')
+  mine(@CurrentUser() user: AuthUser, @Query({ schema: ShootsQuery }) q: ShootsQueryInput) {
     return this.shoots.mine(user, q);
   }
 
   @Get('me/shoots/:jobId')
-  @Roles('reelmaker')
+  @Can(AccessPolicy, 'workShoots')
   one(@CurrentUser() user: AuthUser, @Param('jobId', uuid()) jobId: string) {
     return this.shoots.one(user, jobId);
   }
 
   @Post('me/shoots/:jobId/respond')
-  @Roles('reelmaker')
-  respond(@CurrentUser() user: AuthUser, @Param('jobId', uuid()) jobId: string, @Body(new ZodPipe(RespondShoot)) body: RespondShootInput) {
+  @Can(AccessPolicy, 'workShoots')
+  respond(@CurrentUser() user: AuthUser, @Param('jobId', uuid()) jobId: string, @Body({ schema: RespondShoot }) body: RespondShootInput) {
     return this.shoots.respond(user, jobId, body);
   }
 
   @Post('me/shoots/:jobId/drop-out')
-  @Roles('reelmaker')
-  dropOut(@CurrentUser() user: AuthUser, @Param('jobId', uuid()) jobId: string, @Body(new ZodPipe(DropOut)) body: DropOutInput) {
+  @Can(AccessPolicy, 'workShoots')
+  dropOut(@CurrentUser() user: AuthUser, @Param('jobId', uuid()) jobId: string, @Body({ schema: DropOut }) body: DropOutInput) {
     return this.shoots.dropOut(user, jobId, body);
   }
 
-  /** Booked and extra hours for a month. Reelmakers see their own; Admin and Ops can see everyone. */
   @Get('hours')
-  @Roles('admin', 'ops', 'reelmaker')
-  hours(@CurrentUser() user: AuthUser, @Query(new ZodPipe(HoursQuery)) q: HoursQueryInput) {
+  @Can(AccessPolicy, 'viewHours')
+  hours(@CurrentUser() user: AuthUser, @Query({ schema: HoursQuery }) q: HoursQueryInput) {
     return this.shoots.hours(user, q);
   }
 }

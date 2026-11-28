@@ -1,16 +1,10 @@
 import { Global, Module } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
-import { AuthGuard } from './auth.guard.js';
-import { DbService } from './db.js';
-import { HttpErrorFilter } from './http-error.filter.js';
+import { AuditService } from './audit.service.js';
+import { HashService } from './hash.service.js';
+import { NoticesService } from './notices.service.js';
+import { WorkflowService } from './workflow.service.js';
 
+/** Helpers every feature uses: audit trail, notices, hashing, job status changes. */
 @Global()
-@Module({
-  providers: [
-    DbService,
-    { provide: APP_GUARD, useClass: AuthGuard },
-    { provide: APP_FILTER, useClass: HttpErrorFilter },
-  ],
-  exports: [DbService],
-})
+@Module({ providers: [AuditService, NoticesService, HashService, WorkflowService], exports: [AuditService, NoticesService, HashService, WorkflowService] })
 export class CommonModule {}

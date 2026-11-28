@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { env } from '../common/env.js';
+import { ConfigService } from '@nestjs/config';
+import type { Env } from '../config/env.js';
 import { encodePath, presignUrl, signHeaders, type Credentials } from './sigv4.js';
 
 export interface Part {
@@ -19,15 +20,18 @@ const tag = (xml: string, name: string): string | undefined => xml.match(new Reg
 export class R2Service {
   private readonly log = new Logger('R2');
 
+  constructor(private readonly config: ConfigService<Env, true>) {}
+
   private get cfg() {
-    try {
-      const r2 = env.r2;
-      const creds: Credentials = { accessKeyId: r2.accessKeyId, secretAccessKey: r2.secretAccessKey, region: 'auto', service: 's3' };
-      return { creds, host: `${r2.accountId}.r2.cloudflarestorage.com`, bucket: r2.bucket };
-    } catch (e) {
-      this.log.error((e as Error).message);
+    const accountId = this.config.get('R2_ACCOUNT_ID', { infer: true });
+    const accessKeyId = this.config.get('R2_ACCESS_KEY_ID', { infer: true });
+    const secretAccessKey = this.config.get('R2_SECRET_ACCESS_KEY', { infer: true });
+    if (!accountId || !accessKeyId || !secretAccessKey) {
+      this.log.error('R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must be set in api/.env');
       throw new ServiceUnavailableException('File storage is not set up yet. Call operations.');
     }
+    const creds: Credentials = { accessKeyId, secretAccessKey, region: 'auto', service: 's3' };
+    return { creds, host: `${accountId}.r2.cloudflarestorage.com`, bucket: this.config.get('R2_BUCKET', { infer: true }) };
   }
 
   private path(key: string): string {

@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Header, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { CurrentUser, Roles } from '../common/decorators.js';
+import { CurrentUser } from '@nestjs/authentication';
+import { Can } from '@nestjs/authorization';
+import { AccessPolicy } from '../access/access.policy.js';
+import { toWire } from '../common/snake-case.interceptor.js';
 import type { AuthUser } from '../common/types.js';
-import { ZodPipe } from '../common/zod.pipe.js';
 import { toCsv } from './ledger.csv.js';
 import { LedgerQuery, RecordPayment, type LedgerQueryInput, type RecordPaymentInput } from './ledger.schemas.js';
 import { LedgerService } from './ledger.service.js';
@@ -19,35 +21,35 @@ export class LedgerController {
   constructor(private readonly ledger: LedgerService) {}
 
   @Get('ledger')
-  @Roles('admin', 'accounts', 'sales')
-  list(@CurrentUser() user: AuthUser, @Query(new ZodPipe(LedgerQuery)) q: LedgerQueryInput) {
-    return this.ledger.ledger(user, q);
+  @Can(AccessPolicy, 'viewLedger')
+  list(@Query({ schema: LedgerQuery }) q: LedgerQueryInput) {
+    return this.ledger.ledger(q);
   }
 
   @Get('ledger.csv')
-  @Roles('admin', 'accounts')
+  @Can(AccessPolicy, 'exportLedger')
   @Header('content-type', 'text/csv; charset=utf-8')
   @Header('content-disposition', 'attachment; filename="reelops-ledger.csv"')
-  async csv(@CurrentUser() user: AuthUser, @Query(new ZodPipe(LedgerQuery)) q: LedgerQueryInput) {
-    const { items } = await this.ledger.ledger(user, { ...q, limit: 500, offset: 0 });
-    return toCsv(CSV_COLUMNS, items as Record<string, unknown>[]);
+  async csv(@Query({ schema: LedgerQuery }) q: LedgerQueryInput) {
+    const { items } = await this.ledger.ledger({ ...q, limit: 500, offset: 0 });
+    return toCsv(CSV_COLUMNS, toWire(items) as Record<string, unknown>[]);
   }
 
   @Get('jobs/:id/payments')
-  @Roles('admin', 'accounts', 'sales')
-  payments(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string) {
-    return this.ledger.jobPayments(user, id);
+  @Can(AccessPolicy, 'viewLedger')
+  payments(@Param('id', uuid()) id: string) {
+    return this.ledger.jobPayments(id);
   }
 
   @Post('jobs/:id/payments')
-  @Roles('admin', 'accounts')
-  record(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body(new ZodPipe(RecordPayment)) body: RecordPaymentInput) {
+  @Can(AccessPolicy, 'recordPayment')
+  record(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body({ schema: RecordPayment }) body: RecordPaymentInput) {
     return this.ledger.recordPayment(user, id, body);
   }
 
   @Get('payments/:id/receipt')
-  @Roles('admin', 'accounts', 'sales')
-  receipt(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string) {
-    return this.ledger.receipt(user, id);
+  @Can(AccessPolicy, 'viewLedger')
+  receipt(@Param('id', uuid()) id: string) {
+    return this.ledger.receipt(id);
   }
 }

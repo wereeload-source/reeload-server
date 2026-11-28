@@ -20,17 +20,26 @@
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
-    "db:migrate": "../scripts/migrate.sh",
-    "db:seed": "../scripts/migrate.sh --seed",
-    "db:test": "../scripts/test-db.sh",
-    "check:sql": "tsx scripts/check-queries.ts"
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx src/seed/seed.ts",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@nestjs/authentication": "latest",
+    "@nestjs/authorization": "latest",
     "@nestjs/common": "^12.0.1",
+    "@nestjs/config": "latest",
     "@nestjs/core": "^12.0.1",
     "@nestjs/observe": "^0.3.0",
     "@nestjs/platform-express": "^12.0.1",
-    "pg": "^8.13.0",
+    "@nestjs/schedule": "latest",
+    "@nestjs/terminus": "latest",
+    "@nestjs/throttler": "latest",
+    "@prisma/adapter-pg": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "dotenv": "^17.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "zod": "^3.25.76"
@@ -42,12 +51,12 @@
     "@nestjs/testing": "^12.0.1",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
-    "@types/pg": "^8.11.10",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "oxlint": "^1.58.0",
     "oxlint-tsgolint": "^7.0.2001",
     "prettier": "^3.4.2",
+    "prisma": "^7.0.0",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "tsx": "^4.19.0",
@@ -62,7 +71,10 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "prisma",
+      "@prisma/engines",
+      "@prisma/client"
     ]
   }
 }

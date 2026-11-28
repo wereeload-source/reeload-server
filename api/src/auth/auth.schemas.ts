@@ -5,9 +5,11 @@ export const Login = z.object({
   password: z.string().min(1).max(200),
 });
 
+export const RefreshInput = z.object({ refresh_token: z.string().min(10).max(500) });
+
 export const ChangePassword = z.object({
-  current: z.string().min(1).max(200),
-  next: z.string().min(8, 'Use at least 8 characters').max(200),
+  current_password: z.string().min(1).max(200),
+  new_password: z.string().min(8, 'Use at least 8 characters').max(200),
 });
 
 export type LoginInput = z.infer<typeof Login>;

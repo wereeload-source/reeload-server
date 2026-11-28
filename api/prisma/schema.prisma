@@ -1,0 +1,434 @@
+// ReelOps data model. Tables hold data only: every business rule lives in the NestJS services.
+// After changing this file run `pnpm db:migrate` (creates and applies a migration) and `pnpm db:generate`.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── Enums ───────────────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  admin
+  sales
+  ops
+  reelmaker
+  accounts
+}
+
+enum ReelmakerKind {
+  full_time
+  freelance
+}
+
+enum JobStatus {
+  lead
+  draft
+  confirmed
+  assigned
+  accepted
+  reached
+  uploaded
+  released
+  paid
+  delivered
+  closed
+  cancelled
+}
+
+enum AssignmentStatus {
+  pending
+  accepted
+  declined
+  cancelled
+}
+
+enum PaymentMethod {
+  upi
+  bank_transfer
+  cash
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ChargeDecision {
+  pending
+  charge
+  no_charge
+}
+
+enum UploadKind {
+  proof
+  raw
+  edited
+}
+
+enum UploadStatus {
+  uploading
+  complete
+  aborted
+  deleted
+}
+
+enum ContactOutcome {
+  spoken
+  follow_up
+  approved
+  rejected
+}
+
+enum CheckinMethod {
+  otp
+  ops_release
+}
+
+// ── People ──────────────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         Role
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz()
+
+  reelmaker     Reelmaker?
+  assignments   Assignment[]   @relation("AssignmentReelmaker")
+  leave         Leave[]        @relation("LeaveReelmaker")
+  notifications Notification[]
+  refreshTokens RefreshToken[]
+
+  paymentsRecorded       Payment[]     @relation("PaymentRecordedBy")
+  extraTimeAdded         ExtraTime[]   @relation("ExtraTimeAddedBy")
+  extraTimeDecided       ExtraTime[]   @relation("ExtraTimeDecidedBy")
+  priceChangesRequested  PriceChange[] @relation("PriceChangeRequestedBy")
+  priceChangesDecided    PriceChange[] @relation("PriceChangeDecidedBy")
+  uploads                Upload[]      @relation("UploadedBy")
+  uploadsOnBehalf        Upload[]      @relation("UploadedOnBehalfOf")
+  checkins               Checkin[]     @relation("CheckinReelmaker")
+  checkinsReleased       Checkin[]     @relation("CheckinReleasedBy")
+  shareLinksCreated      ShareLink[]   @relation("ShareLinkCreatedBy")
+  contacts               ContactLog[]  @relation("ContactSalesperson")
+  auditEntries           AuditLog[]    @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Reelmaker {
+  userId   String        @id @db.Uuid
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind     ReelmakerKind @default(full_time)
+  baseCity String
+  notes    String?
+
+  @@map("reelmakers")
+}
+
+// ── Clients and jobs ────────────────────────────────────────────────────────────────────────────
+
+model Client {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  phone       String   @unique // repeat clients are matched by phone
+  whatsapp    String?
+  city        String?
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz()
+
+  jobs Job[]
+
+  @@map("clients")
+}
+
+model Job {
+  id                 String    @id @default(uuid()) @db.Uuid
+  /// RO-1001 is number 1 (see jobCode in common/job-code.ts)
+  number             Int       @unique @default(autoincrement())
+  clientId           String    @db.Uuid
+  client             Client    @relation(fields: [clientId], references: [id])
+  status             JobStatus @default(draft)
+  city               String
+  address            String?
+  mapsUrl            String?
+  startsAt           DateTime? @db.Timestamptz()
+  durationMinutes    Int?
+  onsiteContactName  String?
+  /// WhatsApp number the check-in code goes to
+  onsiteContactPhone String?
+  brief              String?
+  consent            Boolean   @default(false)
+  createdById        String?   @db.Uuid
+  confirmedAt        DateTime? @db.Timestamptz()
+  releasedAt         DateTime? @db.Timestamptz()
+  createdAt          DateTime  @default(now()) @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @db.Timestamptz()
+
+  money        JobMoney?
+  payments     Payment[]
+  priceChanges PriceChange[]
+  extraTime    ExtraTime[]
+  assignments  Assignment[]
+  uploads      Upload[]
+  checkins     Checkin[]
+  shareLinks   ShareLink[]
+
+  @@index([status])
+  @@index([startsAt])
+  @@map("jobs")
+}
+
+// ── Money (only admin, sales and accounts are ever sent these: see AccessPolicy and MoneyService) ─
+
+model JobMoney {
+  jobId        String   @id @db.Uuid
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  agreedAmount Decimal  @db.Decimal(12, 2)
+  updatedAt    DateTime @updatedAt @db.Timestamptz()
+
+  @@map("job_money")
+}
+
+model Payment {
+  id           String        @id @default(uuid()) @db.Uuid
+  jobId        String        @db.Uuid
+  job          Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  amount       Decimal       @db.Decimal(12, 2)
+  method       PaymentMethod
+  reference    String?
+  isAdvance    Boolean       @default(false)
+  receivedAt   DateTime      @default(now()) @db.Timestamptz()
+  recordedById String?       @db.Uuid
+  recordedBy   User?         @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  createdAt    DateTime      @default(now()) @db.Timestamptz()
+
+  @@index([jobId])
+  @@map("payments")
+}
+
+model ExtraTime {
+  id          String         @id @default(uuid()) @db.Uuid
+  jobId       String         @db.Uuid
+  job         Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  minutes     Int
+  note        String?
+  addedById   String?        @db.Uuid
+  addedBy     User?          @relation("ExtraTimeAddedBy", fields: [addedById], references: [id])
+  decision    ChargeDecision @default(pending)
+  decidedById String?        @db.Uuid
+  decidedBy   User?          @relation("ExtraTimeDecidedBy", fields: [decidedById], references: [id])
+  createdAt   DateTime       @default(now()) @db.Timestamptz()
+
+  priceChanges PriceChange[]
+
+  @@map("extra_time")
+}
+
+model PriceChange {
+  id          String         @id @default(uuid()) @db.Uuid
+  jobId       String         @db.Uuid
+  job         Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  delta       Decimal        @db.Decimal(12, 2)
+  reason      String
+  extraTimeId String?        @db.Uuid
+  extraTime   ExtraTime?     @relation(fields: [extraTimeId], references: [id])
+  status      ApprovalStatus @default(pending)
+  requestedById String?      @db.Uuid
+  requestedBy User?          @relation("PriceChangeRequestedBy", fields: [requestedById], references: [id])
+  decidedById String?        @db.Uuid
+  decidedBy   User?          @relation("PriceChangeDecidedBy", fields: [decidedById], references: [id])
+  decidedAt   DateTime?      @db.Timestamptz()
+  createdAt   DateTime       @default(now()) @db.Timestamptz()
+
+  @@map("price_changes")
+}
+
+// ── Scheduling ──────────────────────────────────────────────────────────────────────────────────
+
+model Assignment {
+  id           String           @id @default(uuid()) @db.Uuid
+  jobId        String           @db.Uuid
+  job          Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  reelmakerId  String           @db.Uuid
+  reelmaker    User             @relation("AssignmentReelmaker", fields: [reelmakerId], references: [id])
+  /// The booked window (shoot start to end). No double booking: BookingService refuses overlaps.
+  startsAt     DateTime         @db.Timestamptz()
+  endsAt       DateTime         @db.Timestamptz()
+  status       AssignmentStatus @default(pending)
+  /// decline / drop-out / reassign reason
+  reason       String?
+  assignedById String?          @db.Uuid
+  createdAt    DateTime         @default(now()) @db.Timestamptz()
+  respondedAt  DateTime?        @db.Timestamptz()
+
+  @@index([jobId])
+  @@index([reelmakerId, status, startsAt])
+  @@map("assignments")
+}
+
+model Leave {
+  id          String   @id @default(uuid()) @db.Uuid
+  reelmakerId String   @db.Uuid
+  reelmaker   User     @relation("LeaveReelmaker", fields: [reelmakerId], references: [id], onDelete: Cascade)
+  startsAt    DateTime @db.Timestamptz()
+  endsAt      DateTime @db.Timestamptz()
+  note        String?
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz()
+
+  @@index([reelmakerId, startsAt])
+  @@map("leave")
+}
+
+// ── Shoot day ───────────────────────────────────────────────────────────────────────────────────
+
+model Upload {
+  id           String       @id @default(uuid()) @db.Uuid
+  jobId        String       @db.Uuid
+  job          Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind         UploadKind
+  fileName     String
+  contentType  String?
+  sizeBytes    BigInt
+  objectKey    String       @unique
+  /// S3 multipart UploadId while the upload is in progress
+  r2UploadId   String?
+  status       UploadStatus @default(uploading)
+  uploadedById String       @db.Uuid
+  uploadedBy   User         @relation("UploadedBy", fields: [uploadedById], references: [id])
+  /// set when ops uploaded for a reelmaker
+  onBehalfOfId String?      @db.Uuid
+  onBehalfOf   User?        @relation("UploadedOnBehalfOf", fields: [onBehalfOfId], references: [id])
+  createdAt    DateTime     @default(now()) @db.Timestamptz()
+  completedAt  DateTime?    @db.Timestamptz()
+  deletedAt    DateTime?    @db.Timestamptz()
+
+  @@index([jobId, kind])
+  @@index([jobId, uploadedById, fileName, sizeBytes, status])
+  @@map("uploads")
+}
+
+model Checkin {
+  id               String         @id @default(uuid()) @db.Uuid
+  jobId            String         @db.Uuid
+  job              Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  reelmakerId      String         @db.Uuid
+  reelmaker        User           @relation("CheckinReelmaker", fields: [reelmakerId], references: [id])
+  /// tapped "Reached / About to start"
+  requestedAt      DateTime       @default(now()) @db.Timestamptz()
+  otpHash          String?
+  otpExpiresAt     DateTime?      @db.Timestamptz()
+  otpSends         Int            @default(0)
+  otpLastSentAt    DateTime?      @db.Timestamptz()
+  otpAttempts      Int            @default(0)
+  method           CheckinMethod?
+  verifiedAt       DateTime?      @db.Timestamptz()
+  releaseReason    String?
+  releasedById     String?        @db.Uuid
+  releasedBy       User?          @relation("CheckinReleasedBy", fields: [releasedById], references: [id])
+  selfieUploadId   String?        @db.Uuid
+  locationUploadId String?        @db.Uuid
+  /// server time stamp
+  completedAt      DateTime?      @db.Timestamptz()
+
+  @@unique([jobId, reelmakerId])
+  @@map("checkins")
+}
+
+model ShareLink {
+  id          String    @id @default(uuid()) @db.Uuid
+  jobId       String    @db.Uuid
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  includeRaw  Boolean   @default(false)
+  expiresAt   DateTime  @db.Timestamptz()
+  revokedAt   DateTime? @db.Timestamptz()
+  createdById String?   @db.Uuid
+  createdBy   User?     @relation("ShareLinkCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now()) @db.Timestamptz()
+
+  @@map("share_links")
+}
+
+// ── Sales, audit, notices, settings ─────────────────────────────────────────────────────────────
+
+model ContactLog {
+  id            String         @id @default(uuid()) @db.Uuid
+  salespersonId String         @db.Uuid
+  salesperson   User           @relation("ContactSalesperson", fields: [salespersonId], references: [id])
+  clientId      String?        @db.Uuid
+  clientName    String
+  phone         String?
+  outcome       ContactOutcome
+  note          String?
+  createdAt     DateTime       @default(now()) @db.Timestamptz()
+
+  @@index([salespersonId, createdAt])
+  @@map("contact_log")
+}
+
+/// Append-only: AuditService only ever creates rows.
+model AuditLog {
+  id       Int      @id @default(autoincrement())
+  at       DateTime @default(now()) @db.Timestamptz()
+  actorId  String?  @db.Uuid
+  actor    User?    @relation("AuditActor", fields: [actorId], references: [id])
+  action   String
+  entity   String
+  entityId String?
+  details  Json     @default("{}")
+
+  @@index([at(sort: Desc)])
+  @@map("audit_log")
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime? @db.Timestamptz()
+  createdAt DateTime  @default(now()) @db.Timestamptz()
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @db.Timestamptz()
+
+  @@map("settings")
+}
+
+/// Refresh tokens for @nestjs/authentication. Each token works once; a reused one revokes its whole family.
+model RefreshToken {
+  id              String    @id
+  familyId        String    @map("family_id")
+  userId          String    @map("user_id") @db.Uuid
+  createdAt       DateTime  @map("created_at") @db.Timestamptz()
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz()
+  familyExpiresAt DateTime  @map("family_expires_at") @db.Timestamptz()
+  usedAt          DateTime? @map("used_at") @db.Timestamptz()
+  revoked         Boolean   @default(false)
+  claims          Json      @default("{}")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@index([userId])
+  @@index([familyExpiresAt])
+  @@map("refresh_tokens")
+}

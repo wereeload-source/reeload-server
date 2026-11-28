@@ -1,4 +1,4 @@
-import { istDate, istDayRange, istMonthRange, rangeLiteral, safeSearch } from './time.js';
+import { istDate, istDayRange, istMonthRange, istStamp } from './time.js';
 
 describe('Indian time helpers', () => {
   it('finds the IST day an instant falls on', () => {
@@ -13,7 +13,6 @@ describe('Indian time helpers', () => {
   });
 
   it('writes a Postgres range and cleans search text', () => {
-    expect(rangeLiteral('2026-11-28T04:00:00Z', '2026-11-28T06:00:00Z')).toBe('[2026-11-28T04:00:00.000Z,2026-11-28T06:00:00.000Z)');
-    expect(safeSearch('a,b(c)%*')).toBe('a b c');
+    expect(istStamp(new Date('2026-11-28T04:00:00Z'))).toBe('28 Nov, 09:30');
   });
 });

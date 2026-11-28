@@ -1,12 +1,13 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
-import { CurrentUser, Roles } from '../common/decorators.js';
+import { CurrentUser } from '@nestjs/authentication';
+import { Can } from '@nestjs/authorization';
+import { AccessPolicy } from '../access/access.policy.js';
 import type { AuthUser } from '../common/types.js';
-import { ZodPipe } from '../common/zod.pipe.js';
-import { JobsService } from './jobs.service.js';
 import {
   AgreedAmount, ClientLookup, CreateJob, ListJobsQuery, Reschedule, UpdateJob,
   type CreateJobInput, type ListJobsInput, type RescheduleInput, type UpdateJobInput,
 } from './jobs.schemas.js';
+import { JobsService } from './jobs.service.js';
 
 const uuid = () => new ParseUUIDPipe();
 
@@ -15,57 +16,56 @@ export class JobsController {
   constructor(private readonly jobs: JobsService) {}
 
   @Get('jobs')
-  @Roles('admin', 'sales', 'ops')
-  list(@CurrentUser() user: AuthUser, @Query(new ZodPipe(ListJobsQuery)) q: ListJobsInput) {
+  @Can(AccessPolicy, 'listJobs')
+  list(@CurrentUser() user: AuthUser, @Query({ schema: ListJobsQuery }) q: ListJobsInput) {
     return this.jobs.list(user, q);
   }
 
   @Post('jobs')
-  @Roles('admin', 'sales')
-  create(@CurrentUser() user: AuthUser, @Body(new ZodPipe(CreateJob)) body: CreateJobInput) {
+  @Can(AccessPolicy, 'createJob')
+  create(@CurrentUser() user: AuthUser, @Body({ schema: CreateJob }) body: CreateJobInput) {
     return this.jobs.create(user, body);
   }
 
   @Get('jobs/:id')
-  @Roles('admin', 'sales', 'ops', 'reelmaker')
+  @Can(AccessPolicy, 'viewJob')
   get(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string) {
     return this.jobs.get(user, id);
   }
 
   @Patch('jobs/:id')
-  @Roles('admin', 'sales')
-  update(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body(new ZodPipe(UpdateJob)) body: UpdateJobInput) {
+  @Can(AccessPolicy, 'editJob')
+  update(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body({ schema: UpdateJob }) body: UpdateJobInput) {
     return this.jobs.update(user, id, body);
   }
 
   @Put('jobs/:id/amount')
-  @Roles('admin', 'sales')
-  setAmount(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body(new ZodPipe(AgreedAmount)) body: { agreed_amount: number }) {
+  @Can(AccessPolicy, 'editJob')
+  setAmount(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body({ schema: AgreedAmount }) body: { agreed_amount: number }) {
     return this.jobs.setAgreedAmount(user, id, body.agreed_amount);
   }
 
   @Post('jobs/:id/confirm')
-  @Roles('admin', 'sales')
+  @Can(AccessPolicy, 'confirmJob')
   confirm(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string) {
     return this.jobs.confirm(user, id);
   }
 
   @Post('jobs/:id/reschedule')
-  @Roles('admin', 'sales', 'ops')
-  reschedule(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body(new ZodPipe(Reschedule)) body: RescheduleInput) {
+  @Can(AccessPolicy, 'rescheduleJob')
+  reschedule(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string, @Body({ schema: Reschedule }) body: RescheduleInput) {
     return this.jobs.reschedule(user, id, body);
   }
 
   @Post('jobs/:id/release')
-  @Roles('admin', 'ops')
+  @Can(AccessPolicy, 'releaseJob')
   release(@CurrentUser() user: AuthUser, @Param('id', uuid()) id: string) {
     return this.jobs.release(user, id);
   }
 
-  /** Repeat clients are matched by phone number. Returns null for a new client. */
   @Get('clients/lookup')
-  @Roles('admin', 'sales')
-  lookup(@CurrentUser() user: AuthUser, @Query(new ZodPipe(ClientLookup)) q: { phone: string }) {
-    return this.jobs.clientByPhone(user, q.phone);
+  @Can(AccessPolicy, 'lookupClient')
+  lookup(@Query({ schema: ClientLookup }) q: { phone: string }) {
+    return this.jobs.clientByPhone(q.phone);
   }
 }

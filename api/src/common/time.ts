@@ -23,12 +23,14 @@ export function istMonthRange(month: string): { from: string; to: string } {
 /** Today's IST date. */
 export const istToday = (now: Date = new Date()): string => istDate(now);
 
-/** A Postgres range literal for a time window: [from,to) */
-export const rangeLiteral = (from: string | Date, to: string | Date): string =>
-  `[${new Date(from).toISOString()},${new Date(to).toISOString()})`;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** Strips characters that would break a PostgREST or() filter. */
-export const safeSearch = (s: string): string => s.replace(/[,()%*\\]/g, ' ').trim();
+/** "28 Nov, 09:30" in Indian time, for notices. */
+export function istStamp(instant: Date): string {
+  const t = new Date(instant.getTime() + IST_OFFSET_MS);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(t.getUTCDate())} ${MONTHS[t.getUTCMonth()]}, ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`;
+}
 
-/** Postgres numeric comes back as a number or a string depending on the driver. */
+/** Money and counts can arrive as a number, a string or a Decimal: read them as a number. */
 export const num = (v: unknown): number => (v === null || v === undefined || v === '' ? 0 : Number(v));

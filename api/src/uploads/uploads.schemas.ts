@@ -24,13 +24,7 @@ export const ProofPhoto = z.object({
   size_bytes: z.number().int().min(0).max(25 * 1024 ** 2).optional(),
 });
 
-export const ReviewQuery = z.object({
-  /** only jobs with something overdue */
-  overdue: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
-});
-
 export type CreateUploadInput = z.infer<typeof CreateUpload>;
 export type SignPartInput = z.infer<typeof SignPart>;
 export type CompleteUploadInput = z.infer<typeof CompleteUpload>;
 export type ProofPhotoInput = z.infer<typeof ProofPhoto>;
-export type ReviewQueryInput = z.infer<typeof ReviewQuery>;

@@ -1,26 +1,32 @@
 import { Injectable } from '@nestjs/common';
-import { DbService, one, rows } from '../common/db.js';
 import type { AuthUser } from '../common/types.js';
-import { LIST_NOTICES_SQL, MARK_ALL_READ_SQL, MARK_READ_SQL, UNREAD_COUNT_SQL } from './notifications.sql.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 
+/** In-app notices. Every role reads only their own. */
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly db: DbService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  list(user: AuthUser, unreadOnly: boolean, limit: number) {
-    return this.db.asUser(user.id, async (tx) => ({
-      unread: (await one<{ unread: number }>(tx, UNREAD_COUNT_SQL))?.unread ?? 0,
-      items: await rows(tx, LIST_NOTICES_SQL, [unreadOnly, limit]),
-    }));
+  async list(user: AuthUser, unreadOnly: boolean, limit: number) {
+    const [unread, items] = await Promise.all([
+      this.prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+      this.prisma.notification.findMany({
+        where: { userId: user.id, ...(unreadOnly ? { readAt: null } : {}) },
+        select: { id: true, title: true, body: true, link: true, readAt: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+    ]);
+    return { unread, items };
   }
 
   async markRead(user: AuthUser, id: string) {
-    await this.db.asUser(user.id, (tx) => rows(tx, MARK_READ_SQL, [id]));
+    await this.prisma.notification.updateMany({ where: { id, userId: user.id, readAt: null }, data: { readAt: new Date() } });
     return { ok: true };
   }
 
   async markAllRead(user: AuthUser) {
-    const done = await this.db.asUser(user.id, (tx) => rows(tx, MARK_ALL_READ_SQL));
-    return { ok: true, marked: done.length };
+    const done = await this.prisma.notification.updateMany({ where: { userId: user.id, readAt: null }, data: { readAt: new Date() } });
+    return { ok: true, marked: done.count };
   }
 }

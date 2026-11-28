@@ -18,8 +18,14 @@ export const DecideExtraTime = z
 
 export const HoursDetailQuery = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/).optional() });
 
+export type ReviewQueryInput = z.infer<typeof ReviewQuery>;
 export type SendBackInput = z.infer<typeof SendBack>;
 export type AddExtraTimeInput = z.infer<typeof AddExtraTime>;
 export type ExtraTimeQueryInput = z.infer<typeof ExtraTimeQuery>;
 export type DecideExtraTimeInput = z.infer<typeof DecideExtraTime>;
 export type HoursDetailQueryInput = z.infer<typeof HoursDetailQuery>;
+export const ReviewQuery = z.object({
+  /** only jobs with something overdue */
+  overdue: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
+});
+

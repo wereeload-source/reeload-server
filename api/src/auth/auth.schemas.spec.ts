@@ -9,7 +9,7 @@ describe('login input', () => {
     expect(Login.safeParse({ email: 'not-an-email', password: 'x' }).success).toBe(false);
   });
   it('wants 8 characters in a new password', () => {
-    expect(ChangePassword.safeParse({ current: 'a', next: 'short' }).success).toBe(false);
-    expect(ChangePassword.safeParse({ current: 'a', next: 'long-enough' }).success).toBe(true);
+    expect(ChangePassword.safeParse({ current_password: 'a', new_password: 'short' }).success).toBe(false);
+    expect(ChangePassword.safeParse({ current_password: 'a', new_password: 'long-enough' }).success).toBe(true);
   });
 });

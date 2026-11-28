@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backs up the whole database (tables, security rules, functions, users) to one file.
+# Backs up the whole database (tables and data) to one file.
 #   DATABASE_URL=... scripts/backup.sh [output-file]
 # Use the DIRECT (non-pooled) Neon connection string for pg_dump. Neon also keeps its own
 # point-in-time history; this file is the copy you hold yourself. Store it somewhere other than Neon.
