@@ -11,4 +11,5 @@ for f in supabase/migrations/*.sql; do echo "-- $f"; run "$f"; done
 run supabase/seed.sql
 psql -v ON_ERROR_STOP=1 -q -d "$DB" -f supabase/tests/rules.sql
 psql -v ON_ERROR_STOP=1 -q -d "$DB" -f supabase/tests/foundation.sql
+psql -v ON_ERROR_STOP=1 -q -d "$DB" -f supabase/tests/acceptance.sql
 echo "All database rule tests passed."
