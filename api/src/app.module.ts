@@ -5,6 +5,8 @@ import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CommonModule } from './common/common.module.js';
 import { HealthModule } from './health/health.module.js';
+import { JobsModule } from './jobs/jobs.module.js';
+import { SalesModule } from './sales/sales.module.js';
 import { UsersModule } from './users/users.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -22,6 +24,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     CommonModule,
     AuthModule,
     UsersModule,
+    JobsModule,
+    SalesModule,
     HealthModule,
   ],
   controllers: [AppController],

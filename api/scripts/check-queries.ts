@@ -13,6 +13,8 @@ const MODULES = [
   '../src/common/common.sql.js',
   '../src/auth/auth.sql.js',
   '../src/users/users.sql.js',
+  '../src/jobs/jobs.sql.js',
+  '../src/sales/sales.sql.js',
 ];
 
 const url = process.env.DATABASE_URL;
@@ -26,16 +28,18 @@ for (const path of MODULES) {
   const mod = (await import(path)) as Record<string, unknown>;
   for (const [name, value] of Object.entries(mod)) {
     if (typeof value === 'string' && /\s/.test(value)) queries.push([`${path.split('/').pop()}:${name}`, value]);
-    // Builders that assemble SQL are checked with every optional part switched on.
-    else if (typeof value === 'function' && name === 'updateProfileSql') {
-      queries.push([`${path.split('/').pop()}:${name}`, (value as (c: string[]) => string)(['full_name', 'phone', 'active', 'role'])]);
-    } else if (typeof value === 'function' && name.endsWith('Sql') && value.length === 0) {
-      queries.push([`${path.split('/').pop()}:${name}`, (value as () => string)()]);
+    // A module that builds SQL exports `checkQueries`: sample output with every optional part on.
+    else if (name === 'checkQueries' && typeof value === 'object' && value) {
+      for (const [k, v] of Object.entries(value as Record<string, string>)) queries.push([`${path.split('/').pop()}:${k}`, v]);
     }
   }
 }
 
-let failed = 0;
+// `select (fn(...)).*` runs the function once per column (a job created ten times). Use `select * from fn(...)`.
+const unsafe = queries.filter(([, sql]) => /\)\)\s*\.\*/.test(sql));
+for (const [name] of unsafe) console.error(`BAD   ${name}: use "select * from fn(...)", not "select (fn(...)).*"`);
+
+let failed = unsafe.length;
 for (const [name, sql] of queries) {
   const r = spawnSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-c', `prepare q as ${sql.trim().replace(/;\s*$/, '')}`], { encoding: 'utf8' });
   if (r.status === 0) console.log(`ok    ${name}`);
