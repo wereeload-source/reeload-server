@@ -50,8 +50,8 @@ export class ShareService {
       if (verdict.early) await this.audit.record(tx, user.id, 'early_link', 'jobs', jobId, { code: jobCode(job.number), status: job.status });
       if (job.status === 'paid') await this.workflow.transition(tx, jobId, 'delivered', user.id);
 
-      const clientUrl = this.config.get('CLIENT_URL', { infer: true }).replace(/\/+$/, '');
-      return { id: link.id, url: `${clientUrl}/d/${token}`, expiresAt: link.expiresAt, includeRaw, early: verdict.early };
+      const clientUrl = this.config.get('FRONTEND_URL', { infer: true })[0]!;
+      return { id: link.id, url: `${clientUrl}/d/#${token}`, expiresAt: link.expiresAt, includeRaw, early: verdict.early };
     }, TX_OPTIONS);
   }
 

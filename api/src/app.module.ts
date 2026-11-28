@@ -1,6 +1,5 @@
 import { Module, StandardSchemaValidationPipe } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
-import { AuthenticationModule } from '@nestjs/authentication';
 import { AuthorizationModule } from '@nestjs/authorization';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { createObserveModule } from '@nestjs/observe';
@@ -13,7 +12,8 @@ import { CheckinModule } from './checkin/checkin.module.js';
 import { ApiErrorFilter } from './common/api-error.filter.js';
 import { CommonModule } from './common/common.module.js';
 import { SnakeCaseInterceptor } from './common/snake-case.interceptor.js';
-import { THROTTLERS } from './common/throttle.js';
+import { EnvelopeInterceptor } from './common/envelope.interceptor.js';
+import { throttlers } from './common/throttle.js';
 import { type Env, validateEnv } from './config/env.js';
 import { HealthModule } from './health/health.module.js';
 import { InsightsModule } from './insights/insights.module.js';
@@ -43,28 +43,19 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
-    // Password tries have their own, tighter limits (common/throttle.ts).
-    ThrottlerModule.forRoot(THROTTLERS),
-    // Signs users in and tells the rest of the app who they are: short access tokens plus rotating refresh tokens.
-    AuthenticationModule.forRootAsync({
+    // Password tries and reset codes have their own, tighter limits (common/throttle.ts).
+    ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService<Env, true>) => ({
-        accessToken: {
-          key: config.getOrThrow('JWT_SECRET'),
-          issuer: 'reeload-api',
-          audience: 'reeload',
-          ttl: config.getOrThrow('ACCESS_TOKEN_TTL'),
-        },
-        refreshToken: { ttl: config.getOrThrow('REFRESH_TOKEN_TTL'), absoluteTtl: '30d' },
-      }),
+      useFactory: (config: ConfigService<Env, true>) => throttlers(config.get('PASSWORD_RESET_RATE_LIMIT_PER_HOUR', { infer: true })),
     }),
+    // Cookie JWT sign-in (auth/): it must come before authorization, whose guard reads request.user.
+    AuthModule,
     // Who may do what lives in one class: access/access.policy.ts. Routes without a rule are refused.
     AuthorizationModule.forRoot({ policies: [AccessPolicy] }),
     PrismaModule,
     CommonModule,
     MoneyModule,
     SettingsModule,
-    AuthModule,
     UsersModule,
     JobsModule,
     SalesModule,
@@ -83,6 +74,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     { provide: APP_PIPE, useClass: StandardSchemaValidationPipe },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: SnakeCaseInterceptor },
+    // Every JSON answer is { data } (files and CSV are sent as they are).
+    { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },
     { provide: APP_FILTER, useClass: ApiErrorFilter },
   ],
 })

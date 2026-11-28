@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { JOB_STATUSES } from '../common/types.js';
 
-export const RecordPayment = z.object({
+export const RecordPayment = z.strictObject({
   amount: z.number().positive('Enter the amount received'),
   method: z.enum(['upi', 'bank_transfer', 'cash']),
   reference: z.string().trim().max(120).optional().nullable(),

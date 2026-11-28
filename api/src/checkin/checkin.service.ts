@@ -1,9 +1,11 @@
+import { ConfigService } from '@nestjs/config';
 import { BadRequestException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { BookingService } from '../assign/booking.service.js';
 import { AuditService } from '../common/audit.service.js';
 import { HashService } from '../common/hash.service.js';
 import { jobCode } from '../common/job-code.js';
 import type { AuthUser } from '../common/types.js';
+import type { Env } from '../config/env.js';
 import { WorkflowService } from '../common/workflow.service.js';
 import { TX_OPTIONS } from '../prisma/db.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -33,6 +35,7 @@ export class CheckinService {
     private readonly audit: AuditService,
     private readonly workflow: WorkflowService,
     private readonly whatsapp: WhatsAppService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
 
   /** The reelmaker taps Reached: a six-digit code goes to the client's WhatsApp. */
@@ -75,7 +78,10 @@ export class CheckinService {
       const verdict = canTryCode(c, Date.now());
       if (!verdict.ok) return { kind: 'error', status: verdict.status, message: verdict.message } as const;
 
-      if (!this.hash.equal(this.hash.sha256(`${jobId}:${body.code}`), c.otpHash ?? '')) {
+      // Development only: a fixed test code (CHECKIN_TEST_CODE) is accepted besides the real one. Never set in production.
+      const testCode = this.config.get('CHECKIN_TEST_CODE', { infer: true });
+      const right = (!!testCode && body.code === testCode) || this.hash.equal(this.hash.sha256(`${jobId}:${body.code}`), c.otpHash ?? '');
+      if (!right) {
         await tx.checkin.update({ where: { id: c.id }, data: { otpAttempts: { increment: 1 } } });
         return { kind: 'error', status: 400, message: `Wrong code. ${triesLeftAfterWrong(c.otpAttempts)} tries left.` } as const;
       }

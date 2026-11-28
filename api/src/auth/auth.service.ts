@@ -1,48 +1,64 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { PasswordHasher, TokenService } from '@nestjs/authentication';
-import { PrismaService } from '../prisma/prisma.service.js';
 import type { AuthUser } from '../common/types.js';
-import { AUTH_USER_SELECT } from './user-jwt.provider.js';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { type LoginInput, normalizeIdentifier } from './auth.schemas.js';
+import { AUTH_USER_SELECT } from './jwt.strategy.js';
+import { Passwords } from './passwords.js';
+import { type DeviceInfo, type IssuedTokens, SessionsService } from './sessions.service.js';
+
+const INVALID = 'Invalid credentials';
+
+/** Phones are matched as typed and with spaces, dashes and brackets removed. */
+export const phoneCandidates = (value: string) => [...new Set([value.trim(), normalizeIdentifier('phone', value)])];
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly hasher: PasswordHasher,
-    private readonly tokens: TokenService,
+    private readonly passwords: Passwords,
+    private readonly sessions: SessionsService,
   ) {}
 
-  async login(email: string, password: string) {
-    const found = await this.prisma.user.findUnique({ where: { email }, select: { ...AUTH_USER_SELECT, passwordHash: true } });
-    // verify() also runs against a dummy hash when there is no account, so timing does not reveal which emails exist.
-    const valid = await this.hasher.verify(password, found?.passwordHash);
-    // The same message for a wrong password, an unknown email and a disabled account.
-    if (!valid || !found || !found.active) throw new UnauthorizedException('Wrong email or password');
+  /** Finds an account by email or phone. */
+  findByIdentifier(kind: 'email' | 'phone', identifier: string) {
+    const select = { ...AUTH_USER_SELECT, passwordHash: true };
+    return kind === 'email'
+      ? this.prisma.user.findUnique({ where: { email: normalizeIdentifier('email', identifier) }, select })
+      : this.prisma.user.findFirst({ where: { phone: { in: phoneCandidates(identifier) } }, select });
+  }
 
-    if (this.hasher.needsRehash(found.passwordHash)) {
-      await this.prisma.user.update({ where: { id: found.id }, data: { passwordHash: await this.hasher.hash(password) } });
+  /**
+   * Checks the password and starts a session. A missing account, a disabled account and a wrong
+   * password all get the same 401 and take about the same time.
+   */
+  async login(body: LoginInput, device: DeviceInfo): Promise<{ user: AuthUser; tokens: IssuedTokens }> {
+    const found = await this.findByIdentifier(body.loginType === 'EMAIL_PASSWORD' ? 'email' : 'phone', body.identifier);
+    const valid = await this.passwords.verify(body.password, found?.passwordHash);
+    if (!found || !valid || !found.active) throw new UnauthorizedException(INVALID);
+
+    if (this.passwords.needsUpgrade(found.passwordHash)) {
+      await this.prisma.user.update({ where: { id: found.id }, data: { passwordHash: await this.passwords.hash(body.password) } });
     }
     const { passwordHash: _hash, ...user } = found;
-    const issued = await this.tokens.issue(user.id, { method: 'password' });
-    return { ...issued, user };
+    return { user: user as AuthUser, tokens: await this.sessions.start(user, device) };
   }
 
-  refresh(refreshToken: string) {
-    return this.tokens.refresh(refreshToken);
+  /** The signed-in user, read fresh from the database. */
+  async me(userId: string): Promise<AuthUser> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: AUTH_USER_SELECT });
+    if (!user?.active) throw new UnauthorizedException('Please sign in again');
+    return user as AuthUser;
   }
 
-  /** Ends this device's sign-in: the refresh token stops working at once. */
-  async logout(refreshToken: string): Promise<{ ok: true }> {
-    await this.tokens.revoke(refreshToken);
-    return { ok: true };
-  }
-
+  /** Changes the password and signs the account out on every device (this one too). */
   async changePassword(user: AuthUser, current: string, next: string): Promise<{ ok: true }> {
     const row = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { passwordHash: true } });
-    if (!(await this.hasher.verify(current, row.passwordHash))) throw new BadRequestException('Your current password is wrong');
-    await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash: await this.hasher.hash(next) } });
-    // Signs the account out everywhere else.
-    await this.tokens.revokeAll(user.id);
+    if (!(await this.passwords.verify(current, row.passwordHash))) throw new BadRequestException('Your current password is wrong');
+    const passwordHash = await this.passwords.hash(next);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
+      this.prisma.session.deleteMany({ where: { userId: user.id } }),
+    ]);
     return { ok: true };
   }
 }

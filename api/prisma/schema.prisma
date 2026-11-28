@@ -97,16 +97,20 @@ model User {
   email        String   @unique
   passwordHash String
   fullName     String
-  phone        String?
+  /// Unique so people can sign in or reset a password by phone (WhatsApp).
+  phone        String?   @unique
   role         Role
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @db.Timestamptz()
+  /// Only active users can sign in, refresh or reset a password.
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime? @db.Timestamptz()
+  createdAt    DateTime  @default(now()) @db.Timestamptz()
 
   reelmaker     Reelmaker?
   assignments   Assignment[]   @relation("AssignmentReelmaker")
   leave         Leave[]        @relation("LeaveReelmaker")
   notifications Notification[]
-  refreshTokens RefreshToken[]
+  sessions           Session[]
+  verificationTokens VerificationToken[]
 
   paymentsRecorded       Payment[]     @relation("PaymentRecordedBy")
   extraTimeAdded         ExtraTime[]   @relation("ExtraTimeAddedBy")
@@ -413,22 +417,48 @@ model Setting {
   @@map("settings")
 }
 
-/// Refresh tokens for @nestjs/authentication. Each token works once; a reused one revokes its whole family.
-model RefreshToken {
-  id              String    @id
-  familyId        String    @map("family_id")
-  userId          String    @map("user_id") @db.Uuid
-  createdAt       DateTime  @map("created_at") @db.Timestamptz()
-  expiresAt       DateTime  @map("expires_at") @db.Timestamptz()
-  familyExpiresAt DateTime  @map("family_expires_at") @db.Timestamptz()
-  usedAt          DateTime? @map("used_at") @db.Timestamptz()
-  revoked         Boolean   @default(false)
-  claims          Json      @default("{}")
+/// One row per signed-in device. The refresh token is stored only as a bcrypt hash; a mismatch deletes the row.
+model Session {
+  id               String    @id @db.Uuid
+  userId           String    @db.Uuid
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String
+  /// The jti of the current access token. An access token whose jti is not on a session is refused.
+  accessTokenJti   String?   @unique @db.Uuid
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime  @db.Timestamptz()
+  lastRefreshAt    DateTime? @db.Timestamptz()
+  createdAt        DateTime  @default(now()) @db.Timestamptz()
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
 
-  @@index([familyId])
-  @@index([userId])
-  @@index([familyExpiresAt])
-  @@map("refresh_tokens")
+enum VerificationChannel {
+  EMAIL
+  WHATSAPP
+}
+
+enum VerificationPurpose {
+  PASSWORD_RESET
+  ACCOUNT_VERIFY
+  LOGIN
+}
+
+/// Single-use secrets (reset links, reset codes). Only the sha256 of the secret is stored.
+model VerificationToken {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @db.Uuid
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  channel   VerificationChannel
+  purpose   VerificationPurpose
+  attempts  Int                 @default(0)
+  expiresAt DateTime            @db.Timestamptz()
+  usedAt    DateTime?           @db.Timestamptz()
+  createdAt DateTime            @default(now()) @db.Timestamptz()
+
+  @@index([userId, purpose, usedAt, expiresAt])
+  @@map("verification_tokens")
 }

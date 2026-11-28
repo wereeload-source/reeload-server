@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { PasswordHasher, TokenService } from '@nestjs/authentication';
+import { Passwords } from '../auth/passwords.js';
+import { SessionsService } from '../auth/sessions.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../common/audit.service.js';
 import type { AuthUser } from '../common/types.js';
@@ -22,8 +23,8 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly hasher: PasswordHasher,
-    private readonly tokens: TokenService,
+    private readonly passwords: Passwords,
+    private readonly sessions: SessionsService,
   ) {}
 
   async list() {
@@ -41,7 +42,7 @@ export class UsersService {
   }
 
   async create(admin: AuthUser, body: CreateUserInput) {
-    const passwordHash = await this.hasher.hash(body.password);
+    const passwordHash = await this.passwords.hash(body.password);
     try {
       const id = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
@@ -92,16 +93,16 @@ export class UsersService {
     }, TX_OPTIONS);
 
     // A disabled account must stop working everywhere at once.
-    if (body.active === false) await this.tokens.revokeAll(id);
+    if (body.active === false) await this.sessions.removeAll(id);
     return this.get(id);
   }
 
   async resetPassword(admin: AuthUser, id: string, password: string): Promise<{ ok: true }> {
-    const passwordHash = await this.hasher.hash(password);
+    const passwordHash = await this.passwords.hash(password);
     const done = await this.prisma.user.updateMany({ where: { id }, data: { passwordHash } });
     if (!done.count) throw new NotFoundException('User not found');
     await this.audit.record(this.prisma, admin.id, 'password_reset', 'users', id);
-    await this.tokens.revokeAll(id);
+    await this.sessions.removeAll(id);
     return { ok: true };
   }
 }

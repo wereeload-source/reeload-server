@@ -1,5 +1,7 @@
 # Go-live and handover
 
+For a free, shared testing copy (development mode, test check-in code) see [DEV-HOSTING.md](DEV-HOSTING.md).
+
 What you (the owner) set up, in order. Each step says where to click and which value goes where.
 Nothing here is needed for local development: `pnpm db:local` gives you a real Postgres, and check-in codes are printed in the API log.
 
@@ -47,8 +49,8 @@ The API sends the 6-digit check-in code to the on-site contact through the **Wha
 ## 4. Secrets and hosting
 
 - `JWT_SECRET` and `HASH_PEPPER`: generate each with `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`. Never change `HASH_PEPPER` once live: it would break open check-in codes and existing download links.
-- **API**: a long-lived Node 22+ process (Render, Railway, Fly.io, or a small VPS with `pm2`), not serverless, because the daily clean-up runs inside it. Run **exactly one** instance. It needs outbound HTTPS to Supabase, R2 and graph.facebook.com. Set `CLIENT_URL` to the app's address, and `TRUST_PROXY=1` when it sits behind one proxy.
-- **Client** (`reeload-client`): Vercel or any Node host. Set `API_URL` to the API's HTTPS address.
+- **API**: a long-lived Node 22+ process (Render, Railway, Fly.io, or a small VPS with `pm2`), not serverless, because the daily clean-up runs inside it. Run **exactly one** instance. It needs outbound HTTPS to Supabase, R2 and graph.facebook.com. Set `FRONTEND_URL` to the app's origin, `JWT_SECRET` and `JWT_REFRESH_SECRET` to two different 48+ character secrets, `COOKIE_SECURE=true` (the API refuses to start in production without it), and `TRUST_PROXY=1` when it sits behind one proxy.
+- **Web app**: a static site (`pnpm build` in reeload-client, upload `out/`). Build it with `NEXT_PUBLIC_API_URL` set to the API's address. Put the app and the API on the same site (e.g. `app.example.com` and `api.example.com`) with `COOKIE_SAME_SITE=lax` and `COOKIE_DOMAIN=example.com`; on different sites use `COOKIE_SAME_SITE=none` with `COOKIE_SECURE=true`.
 - Serve both over HTTPS. Make both GitHub repositories **private** before real data exists.
 
 ## 5. First production setup

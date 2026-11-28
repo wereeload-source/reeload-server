@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Header, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { CurrentUser } from '@nestjs/authentication';
+import { CurrentUser } from '../auth/decorators.js';
 import { Can } from '@nestjs/authorization';
 import { AccessPolicy } from '../access/access.policy.js';
 import { toWire } from '../common/snake-case.interceptor.js';

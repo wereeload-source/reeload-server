@@ -216,7 +216,7 @@ export class JobsService {
           bookingMoved = true;
         }
         if (bookingMoved) {
-          await this.notices.toUser(tx, booking.reelmakerId, 'Shoot rescheduled', `${code} is now ${when}`, `/m/shoots/${id}`);
+          await this.notices.toUser(tx, booking.reelmakerId, 'Shoot rescheduled', `${code} is now ${when}`, `/m/shoot?id=${id}`);
         } else {
           await tx.assignment.update({ where: { id: booking.id }, data: { status: 'cancelled', reason: 'Rescheduled: reelmaker not free at the new time' } });
           await this.workflow.transition(tx, id, 'confirmed', user.id);

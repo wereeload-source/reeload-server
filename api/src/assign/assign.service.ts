@@ -135,7 +135,7 @@ export class AssignService {
       });
       await this.workflow.transition(tx, jobId, 'assigned', user.id);
       await this.audit.record(tx, user.id, 'insert', 'assignments', row.id, { jobId, reelmakerId: reelmaker.id });
-      await this.notices.toUser(tx, reelmaker.id, 'New shoot request', `${code} on ${istStamp(w.start)}`, `/m/shoots/${jobId}`);
+      await this.notices.toUser(tx, reelmaker.id, 'New shoot request', `${code} on ${istStamp(w.start)}`, `/m/shoot?id=${jobId}`);
       return row;
     }, TX_OPTIONS);
   }

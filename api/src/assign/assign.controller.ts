@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { CurrentUser } from '@nestjs/authentication';
+import { CurrentUser } from '../auth/decorators.js';
 import { Can } from '@nestjs/authorization';
 import { z } from 'zod';
 import { AccessPolicy } from '../access/access.policy.js';

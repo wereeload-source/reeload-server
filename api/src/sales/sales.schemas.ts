@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
-export const RecordAdvance = z.object({
+export const RecordAdvance = z.strictObject({
   amount: z.number().positive(),
   method: z.enum(['upi', 'bank_transfer', 'cash']).default('upi'),
   reference: z.string().trim().max(120).optional().nullable(),
 });
 
-export const RequestPriceChange = z.object({
+export const RequestPriceChange = z.strictObject({
   /** Positive raises the price, negative lowers it. */
   delta: z.number().refine((n) => n !== 0, 'Enter the change in amount'),
   reason: z.string().trim().min(3).max(300),
@@ -17,9 +17,9 @@ export const PriceChangeQuery = z.object({
   job_id: z.string().uuid().optional(),
 });
 
-export const DecidePriceChange = z.object({ approve: z.boolean() });
+export const DecidePriceChange = z.strictObject({ approve: z.boolean() });
 
-export const LogContact = z.object({
+export const LogContact = z.strictObject({
   client_id: z.string().uuid().optional().nullable(),
   client_name: z.string().trim().min(1).max(120),
   phone: z.string().trim().max(24).optional().nullable(),
