@@ -23,6 +23,7 @@ const MODULES = [
   '../src/review/review.sql.js',
   '../src/ledger/ledger.sql.js',
   '../src/share/share.sql.js',
+  '../src/insights/insights.sql.js',
 ];
 
 const url = process.env.DATABASE_URL;

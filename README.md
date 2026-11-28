@@ -206,3 +206,13 @@ Set `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in 
 | `GET /jobs/:id/share-links`, `POST /share-links/:id/revoke` | ops, admin | Links with `active` / `expired` / `revoked`; revoke is audited |
 | `GET /public/share/:token` | public | Client, job code, shoot date and 30-minute file URLs; 404 if invalid or revoked, 410 if expired (7 days, setting `share_link_days`) |
 | `POST /retention/sweep` | scheduler, header `x-cron-secret` | Deletes raw files after 10 days and edited after 20 (admin setting 15 to 20); `ops/retention-sweep.workflow.yml` is a ready GitHub Actions schedule |
+
+### Step 10: calendars, dashboard, audit, settings
+
+| Route | Roles | What it does |
+|---|---|---|
+| `GET /calendar/month?month=YYYY-MM`, `GET /calendar/day?date=` | admin, sales, ops | Jobs per IST day with status counts; one day's shoots with client and reelmaker (no money) |
+| `GET /me/calendar?month=` | reelmaker | Own shoots and leave days |
+| `GET /dashboard` | admin | Jobs by status, today's shoots, unassigned (flagged), check-ins waiting, overdue uploads, pending approvals, outstanding money, received this month, sales calls today, recent activity |
+| `GET /audit?entity=&action=&before=` | admin | The audit log, newest first, paged |
+| `GET /settings`, `PUT /settings/:key` | any read, admin write | Retention days (edited 15 to 20), link days, raw sharing, deadlines, 48 h flag; changes are audited |
