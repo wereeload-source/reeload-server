@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import pg from 'pg';
 import { env } from './env.js';
 
@@ -29,9 +29,23 @@ export async function one<T = Record<string, unknown>>(tx: Tx, sql: string, para
 @Injectable()
 export class DbService implements OnModuleDestroy {
   private pool?: pg.Pool;
+  private readonly log = new Logger('Database');
 
   private get db(): pg.Pool {
-    return (this.pool ??= new pg.Pool({ connectionString: env.databaseUrl, max: env.poolMax }));
+    if (!this.pool) {
+      this.pool = new pg.Pool({
+        connectionString: env.databaseUrl,
+        max: env.poolMax,
+        // A runaway query or a stuck transaction must not hold a connection forever.
+        statement_timeout: 30_000,
+        idle_in_transaction_session_timeout: 60_000,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 10_000,
+      });
+      // Neon closes idle connections. Without this listener, node-pg turns that into a crash of the whole API.
+      this.pool.on('error', (e: Error) => this.log.warn(`Idle database connection dropped: ${e.message}`));
+    }
+    return this.pool;
   }
 
   async asUser<T>(userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
