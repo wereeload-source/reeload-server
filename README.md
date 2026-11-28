@@ -178,3 +178,13 @@ Set `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in 
 | `POST /uploads/proof` | reelmaker | One signed PUT for a live check-in photo, then `complete` |
 | `GET /jobs/:id/uploads`, `GET /uploads/:id/download` | reelmaker (own), ops, admin | File list and a 15-minute download link |
 | `GET /review?overdue=true` | ops, admin | Shoots with raw (24 h) and edited (3 days) deadlines, overdue first |
+
+### Step 7: review, release, extra time, hours
+
+| Route | Roles | What it does |
+|---|---|---|
+| `POST /jobs/:id/release` | admin, ops | Reviewed work released (Paid automatically if nothing is owed) |
+| `POST /jobs/:id/send-back` | admin, ops | `{note}`: job returns to Reached, the reelmaker is told what to fix |
+| `POST /jobs/:id/extra-time` | admin, ops | Add extra minutes; Sales and Admin are told |
+| `GET /extra-time`, `POST /extra-time/:id/decision` | sales, admin (list also ops) | Charge or not; charging creates a price change Admin must approve |
+| `GET /hours`, `GET /hours/:reelmakerId?month=` | admin, ops, reelmaker (own) | Booked + extra hours; the reelmaker sees extra minutes but never whether they were charged |
