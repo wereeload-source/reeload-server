@@ -28,4 +28,20 @@ export const env = {
   get poolMax(): number {
     return int('DB_POOL_MAX', 10);
   },
+  /** Mixed into OTP and link-token hashes. Set a long random value in production and never change it. */
+  get hashPepper(): string {
+    return process.env.HASH_PEPPER ?? '';
+  },
+  get production(): boolean {
+    return process.env.NODE_ENV === 'production';
+  },
+  /** WhatsApp Business Cloud API. Optional in development: the code is printed to the API log instead. */
+  get whatsapp(): { token?: string; phoneId?: string; otpTemplate: string; lang: string } {
+    return {
+      token: process.env.WHATSAPP_TOKEN || undefined,
+      phoneId: process.env.WHATSAPP_PHONE_NUMBER_ID || undefined,
+      otpTemplate: process.env.WHATSAPP_OTP_TEMPLATE || 'reelops_checkin_otp',
+      lang: process.env.WHATSAPP_TEMPLATE_LANG || 'en',
+    };
+  },
 };

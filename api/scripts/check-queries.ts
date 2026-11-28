@@ -18,6 +18,7 @@ const MODULES = [
   '../src/assign/assign.sql.js',
   '../src/notifications/notifications.sql.js',
   '../src/shoots/shoots.sql.js',
+  '../src/checkin/checkin.sql.js',
 ];
 
 const url = process.env.DATABASE_URL;
