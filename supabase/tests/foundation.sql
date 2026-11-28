@@ -65,3 +65,30 @@ do $$ begin
 end $$;
 reset role;
 update public.profiles set active = true where id = '00000000-0000-0000-0000-000000000012';
+
+-- Settings: Admin changes them (and it is recorded), nobody else can, and the retention range holds.
+reset role;
+set role authenticated;
+do $$
+declare v_old jsonb; n int;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);   -- Ops
+  begin
+    update public.settings set value = '10'::jsonb where key = 'share_link_days';
+    if found then raise exception 'FAIL: Ops changed a setting'; end if;
+  exception when insufficient_privilege then null; end;
+
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);   -- Admin
+  select value into v_old from public.settings where key = 'share_link_days';
+  update public.settings set value = '9'::jsonb where key = 'share_link_days';
+  if not found then raise exception 'FAIL: Admin could not change a setting'; end if;
+  begin
+    update public.settings set value = '25'::jsonb where key = 'edited_retention_days';
+    raise exception 'FAIL: edited retention of 25 days accepted';
+  exception when check_violation then null; end;
+  update public.settings set value = v_old where key = 'share_link_days';
+  select count(*) into n from public.audit_log where entity = 'settings' and entity_id = 'share_link_days';
+  if n < 2 then raise exception 'FAIL: setting changes were not audited (% rows)', n; end if;
+  raise notice 'ok: settings are Admin-only, range-checked and audited';
+end $$;
+reset role;
